@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "scratchnn"
+description = "A pedagogical neural network library in pure Python: logistic regression, softmax regression, and the multi-layer perceptron, built on hand-derived backpropagation."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Alex Towell", email = "queelius@gmail.com" }]
+keywords = [
+    "neural-network",
+    "deep-learning",
+    "machine-learning",
+    "education",
+    "backpropagation",
+    "pedagogical",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["version"]
+dependencies = []
+
+# The core library is standard-library only. The visualization module is the
+# sole exception; install it with:  pip install "scratchnn[viz]"
+[project.optional-dependencies]
+viz = ["matplotlib", "pillow"]
+
+[tool.hatch.version]
+path = "src/scratchnn/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scratchnn"]
