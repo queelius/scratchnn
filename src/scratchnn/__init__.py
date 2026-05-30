@@ -12,6 +12,7 @@ from .neural_net import (
     sigmoid,
     logsumexp,
     softmax,
+    softplus,
     Layer,
     Linear,
     Tanh,
@@ -19,9 +20,15 @@ from .neural_net import (
     Loss,
     SigmoidBCE,
     SoftmaxCrossEntropy,
+    MSELoss,
+    PoissonNLLLoss,
+    GaussianNLLLoss,
     Network,
     gradient_check,
 )
+from .conv import Conv2D, GlobalAvgPool
+from .recurrent import RNNCell
+from .embedding import Embedding, EmbedConcat
 
 __version__ = "0.1.0"
 
@@ -30,6 +37,7 @@ __all__ = [
     "sigmoid",
     "logsumexp",
     "softmax",
+    "softplus",
     "Layer",
     "Linear",
     "Tanh",
@@ -37,6 +45,14 @@ __all__ = [
     "Loss",
     "SigmoidBCE",
     "SoftmaxCrossEntropy",
+    "MSELoss",
+    "PoissonNLLLoss",
+    "GaussianNLLLoss",
+    "Conv2D",
+    "GlobalAvgPool",
+    "RNNCell",
+    "Embedding",
+    "EmbedConcat",
     "Network",
     "gradient_check",
 ]

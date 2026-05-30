@@ -43,6 +43,15 @@ def softmax(zs):
     return [e / total for e in exps]
 
 
+def softplus(z):
+    """Softplus: log(1 + exp(z)). The smooth analogue of the positive part.
+
+    Evaluated as max(z, 0) + log1p(exp(-|z|)) to avoid overflow for large |z|.
+    Its derivative is the logistic sigmoid, sigmoid(z).
+    """
+    return max(z, 0.0) + math.log1p(math.exp(-abs(z)))
+
+
 # --------------------------------------------------------------------------
 # Layers
 # --------------------------------------------------------------------------
@@ -184,6 +193,81 @@ class SoftmaxCrossEntropy(Loss):
 
     def probs(self, logits):
         return softmax(logits)
+
+
+class MSELoss(Loss):
+    """Identity output with mean squared error.
+
+    The raw network output is the prediction (identity link function).
+    Targets are list[float] of the same length as the output. The 1/2
+    convention makes the gradient match the canonical p - y pattern of
+    the other losses: dL/dz_i = z_i - y_i.
+    """
+
+    def value(self, logits, y):
+        return 0.5 * sum((zi - yi) ** 2 for zi, yi in zip(logits, y))
+
+    def grad(self, logits, y):
+        return [zi - yi for zi, yi in zip(logits, y)]
+
+    def probs(self, logits):
+        # Identity link: the prediction IS the raw output.
+        return list(logits)
+
+
+class PoissonNLLLoss(Loss):
+    """Log-link Poisson negative log-likelihood. Expects a single logit.
+
+    The raw output z is interpreted as a log-rate. The predicted rate is
+    lambda = exp(z), guaranteed positive. Target y is a count (typically a
+    non-negative integer, but any real is accepted). The constant log(y!)
+    is omitted; it does not depend on z and does not affect optimization.
+
+    Canonical-link form: dL/dz = exp(z) - y = lambda - y.
+    """
+
+    def value(self, logits, y):
+        z = logits[0]
+        return math.exp(z) - z * y
+
+    def grad(self, logits, y):
+        z = logits[0]
+        return [math.exp(z) - y]
+
+    def probs(self, logits):
+        # Inverse of log link: the predicted rate is exp(z).
+        return [math.exp(logits[0])]
+
+
+class GaussianNLLLoss(Loss):
+    """Heteroscedastic Gaussian NLL. Expects two logits, (z_mu, z_s).
+
+    The first logit is the mean mu = z_mu (identity link on the mean). The
+    second logit z_s is mapped through softplus to a positive scale,
+    sigma = softplus(z_s), enforcing positivity without clamping. Target y
+    is a single real number. The constant 0.5 * log(2*pi) is omitted.
+
+    Loss: 0.5 * (y - mu)**2 / sigma**2 + log(sigma).
+    Gradients are hand-derived; the chain through softplus uses
+    d(softplus(z_s))/dz_s = sigmoid(z_s).
+    """
+
+    def value(self, logits, y):
+        mu = logits[0]
+        s = softplus(logits[1])
+        return 0.5 * (y - mu) ** 2 / (s * s) + math.log(s)
+
+    def grad(self, logits, y):
+        mu = logits[0]
+        z_s = logits[1]
+        s = softplus(z_s)
+        dmu = (mu - y) / (s * s)
+        ds = -((y - mu) ** 2) / (s ** 3) + 1.0 / s
+        return [dmu, ds * sigmoid(z_s)]
+
+    def probs(self, logits):
+        # Report (mu, sigma) for the predictive Gaussian.
+        return [logits[0], softplus(logits[1])]
 
 
 # --------------------------------------------------------------------------

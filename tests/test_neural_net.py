@@ -170,6 +170,26 @@ def test_softmax_ce_probs():
     assert approx(p[0], 1.0 / 3.0)
 
 
+def test_mse_value_zero_at_zero_residual():
+    assert approx(nn.MSELoss().value([1.0, 2.0], [1.0, 2.0]), 0.0)
+
+
+def test_mse_value_matches_half_sum_of_squares():
+    # 1/2 * (1^2 + 2^2) = 2.5
+    assert approx(nn.MSELoss().value([0.0, 0.0], [1.0, 2.0]), 2.5)
+
+
+def test_mse_grad_is_residual():
+    g = nn.MSELoss().grad([1.5, -0.5], [1.0, 2.0])
+    assert approx(g[0], 0.5)
+    assert approx(g[1], -2.5)
+
+
+def test_mse_probs_is_identity():
+    # for regression the prediction IS the raw output; no link function
+    assert nn.MSELoss().probs([1.5, -0.5, 3.7]) == [1.5, -0.5, 3.7]
+
+
 def test_network_forward_is_layer_composition():
     layer = nn.Linear(2, 1)
     layer.weights = [[1.0, 1.0]]
