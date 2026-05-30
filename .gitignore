@@ -6,3 +6,6 @@ build/
 dist/
 *.egg-info/
 training.gif
+
+# Trained model checkpoints (regenerable from the experiment scripts)
+*.pt
