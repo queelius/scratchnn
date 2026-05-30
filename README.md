@@ -12,8 +12,10 @@ of a single `Network` class:
 
 Gradients are hand-derived and computed by an explicit per-layer backward
 pass; a numerical gradient checker verifies them. The companion
-[`docs/walkthrough.md`](docs/walkthrough.md) carries the math and the
-narrative.
+[`docs/series/01-foundations.md`](docs/series/01-foundations.md)
+carries the math and the narrative. It is the first post in a series
+on neural-network inductive biases; the rest of the series lives in
+`docs/series/`.
 
 ## Install
 
@@ -69,7 +71,14 @@ src/scratchnn/
     visualize.py       optional matplotlib training visualization
 tests/                 unit tests and gradient checks
 examples/demos.py      runnable demos
-docs/walkthrough.md    the pedagogical narrative
+docs/series/01-foundations.md       the pedagogical narrative (post 1)
+docs/series/02-output-heads.md      output heads as inductive bias
+docs/series/03-cnn.md               convolutional inductive bias
+docs/series/04-fixed-context-lm.md  fixed-context language modeling
+docs/series/05-rnn.md               recurrent inductive bias
+docs/series/06-transformer-pointers.md   attention as content-addressable memory
+docs/series/07-interpretability.md  reverse-engineering the pointer circuit
+docs/series/08-rl-intro.md          intro to reinforcement learning
 ```
 
 ## License
