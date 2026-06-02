@@ -1,0 +1,37 @@
+# bookwright project configuration
+project:
+  name: inductive-biases-in-neural-networks
+  title: "Inductive Biases in Neural Networks"
+  subtitle: "A Built-from-Scratch Tour"
+  author: "Alexander Towell"
+  year: 2026
+
+# Notebook stack for paired computational notebooks (chapter sanity checks).
+notebook:
+  stack: python-uv-jupyter
+  dir: notebooks
+
+# LaTeX build pipeline.
+build:
+  engine: pdflatex
+  bib: biber
+  root: book/book.tex
+
+# Project layout (relative to this project root).
+paths:
+  book: book
+  chapters: book/chapters
+  frontmatter: book/frontmatter
+  appendices: book/appendices
+  parts: book/parts
+  notation: book/alex.sty
+  references: book/references.bib
+  papers: papers
+  specs: docs/superpowers/specs
+  plans: docs/superpowers/plans
+
+# The scratchnn library and its blog-post chapters live in the parent repo.
+sources:
+  library: ../../src/scratchnn
+  posts: ../../docs/series
+  existing_latex_book: ../../docs/booklet

@@ -1,0 +1,30 @@
+% Inductive Biases in Neural Networks
+% Build with the Makefile in this directory:  make   (pdflatex + biber pipeline)
+\documentclass[11pt]{book}
+
+\input{preamble}
+\usepackage{alex}            % project notation macros
+
+\addbibresource{references.bib}
+
+\title{Inductive Biases in Neural Networks\\[0.6ex]{\large\itshape A Built-from-Scratch Tour}}
+\author{Alexander Towell}
+\date{2026}
+
+\begin{document}
+
+\frontmatter
+\maketitle
+\tableofcontents
+% Front matter (preface, notation) is added under book/frontmatter and
+% \input here as the book grows.
+
+\mainmatter
+\input{parts/part1.tex}
+% Further parts are added under book/parts and \input here.
+
+\backmatter
+\nocite{*}   % until chapters cite works individually, list the seeded refs
+\printbibliography[heading=bibintoc]
+
+\end{document}
