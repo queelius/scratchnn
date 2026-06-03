@@ -1,11 +1,119 @@
 % DEFINED:   sec:nn-as-function, sec:linear-limits, eq:residual
-% RESOLVED:  (none)
-% FORWARD:   sec:mlp-backprop (Task 4)
+% RESOLVED:  (none; first sections of the chapter)
+% FORWARD:   sec:mlp-backprop (Task 4), sec:logistic (Task 5), sec:softmax (Task 5)
 
 \section{What is a neural network?}\label{sec:nn-as-function}
 
-% TODO Task 3
+A neural network is a parameterized function $f_\theta: \R^n \to \R^m$.
+It takes a real-valued input vector and produces a real-valued output
+vector. That is the whole structural commitment. What the output
+\emph{means} is a separate decision, made by the loss.
+
+The network produces raw values; the loss interprets those values as a
+prediction by composing them with an \textbf{output activation} (also
+called a \textbf{link function} in the language of generalized linear
+models). The choice of link function and matching loss together specify
+what kind of thing the network is predicting.
+
+The simplest case is \textbf{regression}: the raw output \emph{is} the
+prediction. The link function is the identity, and the loss is
+\textbf{mean squared error}:
+\begin{equation}\label{eq:residual}
+  L = \frac{1}{2} \sum_i (\hat{y}_i - y_i)^2,
+  \qquad
+  \frac{\partial L}{\partial \hat{y}_i} = \hat{y}_i - y_i.
+\end{equation}
+The gradient is just the residual. This pattern, $\hat{y} - y$, recurs
+throughout the chapter. It is the gradient of every canonical loss with
+respect to its raw output, for reasons that turn out to be a theorem
+about exponential families and canonical links, not an accident
+(Chapter~2 proves it).
+
+The \texttt{MSELoss} class encodes this directly:
+\begin{lstlisting}
+class MSELoss(Loss):
+    def value(self, logits, y):
+        return 0.5 * sum((zi - yi) ** 2 for zi, yi in zip(logits, y))
+
+    def grad(self, logits, y):
+        return [zi - yi for zi, yi in zip(logits, y)]
+
+    def probs(self, logits):
+        # Identity link: the prediction IS the raw output.
+        return list(logits)
+\end{lstlisting}
+Note the $\frac{1}{2}$ convention in \texttt{value}: it makes the gradient
+exactly $\hat{y} - y$ with no leading constant, matching the pattern of
+the other losses.
+
+A concrete demonstration: fit $y = \sin(x) + \varepsilon$ on
+$x \in [-\pi, \pi]$ with a small MLP, identity output, and MSE loss
+(\texttt{examples/regression.py}). After 2000 epochs of mini-batch SGD
+the network learns the curve. This architecture is the same MLP we build
+up to in \Cref{sec:mlp-backprop}; only the output head and loss differ.
+
+With regression in hand as the unspecialized base case, the rest of the
+chapter is a tour through two questions. First, what
+\emph{expressive limits} does the architecture itself impose? That is
+\Cref{sec:linear-limits,sec:mlp-backprop}: a single linear unit cannot
+represent all continuous functions; the multilayer perceptron can.
+Second, what \emph{output-side specializations} let the same
+architecture solve concrete prediction problems beyond regression? That
+is \Cref{sec:logistic,sec:softmax}: classification by sigmoid for
+binary outcomes, softmax for categorical.
 
 \section{The single linear unit and its limits}\label{sec:linear-limits}
 
-% TODO Task 3
+The smallest non-trivial network is one \texttt{Linear} layer mapping
+inputs to outputs:
+\[
+  \vz = W \vx + \mathbf{b}.
+\]
+This is a \textbf{single-layer perceptron} (SLP): an affine map with no
+non-linearity. Trained with MSE it learns the least-squares fit. Trained
+with a sigmoid head and BCE loss (\Cref{sec:logistic}), it is logistic
+regression. The function class either way is \emph{linear} in the input.
+
+The SLP can fit any linearly separable target. It cannot fit anything
+else.
+
+The canonical demonstration is XOR on $\{0, 1\}^2$:
+\[
+  \mathrm{XOR}(0,0) = 0, \quad
+  \mathrm{XOR}(0,1) = 1, \quad
+  \mathrm{XOR}(1,0) = 1, \quad
+  \mathrm{XOR}(1,1) = 0.
+\]
+Training a single \texttt{Linear} layer with \texttt{SigmoidBCE} on these
+four points for 500 epochs (batch size 4, seed~42):
+\begin{lstlisting}
+slp = Network([Linear(2, 1)], loss=SigmoidBCE())
+slp.fit(xor_X, xor_Y, epochs=500, lr=0.5, batch_size=4)
+\end{lstlisting}
+Every input converges to $p = 0.5000$. The model literally cannot do
+better. To see why, write down what fitting all four points would
+require. With $\hat{y} = \sigma(w_1 x_1 + w_2 x_2 + b)$ and targets
+$\{0, 1, 1, 0\}$, the BCE loss is minimized when each $\hat{y}$ matches
+its target. Since sigmoid is monotone, the four constraints reduce to
+four inequalities:
+\[
+  b < 0, \quad
+  w_1 + b > 0, \quad
+  w_2 + b > 0, \quad
+  w_1 + w_2 + b < 0.
+\]
+Adding the second and third gives $w_1 + w_2 + 2b > 0$, so
+$w_1 + w_2 + b > -b > 0$. But the fourth requires
+$w_1 + w_2 + b < 0$. Contradiction. No choice of $(w_1, w_2, b)$
+fits all four points simultaneously.
+
+Geometrically: a linear classifier draws a single hyperplane in the
+input space (a line in $\R^2$). XOR's positive class
+$\{(0,1),(1,0)\}$ and negative class $\{(0,0),(1,1)\}$ lie at
+diagonal corners of the unit square. No line separates them.
+
+This was \textcite{minsky1969perceptrons}'s argument in 1969, which
+stalled the perceptron research program for a decade and a half. The
+resolution is one of the cleanest examples of how architecture and
+expressivity interact. To escape linearity, add a non-linearity: the
+subject of \Cref{sec:mlp-backprop}.
