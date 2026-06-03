@@ -1,5 +1,5 @@
 % DEFINED:   sec:stability, sec:gradcheck, sec:autograd-note
-% RESOLVED:  sec:logits-logprobs, sec:mlp-backprop
+% RESOLVED:  sec:logits-logprobs, eq:logodds, sec:mlp-backprop
 % FORWARD:   (none)
 
 \section{Numerical stability is the gauge freedom, reused}\label{sec:stability}
@@ -10,9 +10,10 @@ the largest logit first,
   \softmax(\vz) = \softmax\!\left(\vz - \max_i z_i\right).
 \]
 This is \emph{exactly} the additive-constant freedom from
-\Cref{sec:logits-logprobs}. Softmax does not care about a shared shift
-of the logits, so we spend that freedom to keep the exponentials in a
-safe range. Stability here is not a new idea bolted on. It is the gauge
+\Cref{sec:logits-logprobs}: since only logit differences carry
+information (the log-odds of \Cref{eq:logodds}), a shared shift of the
+logits changes nothing, and we spend that freedom to keep the
+exponentials in a safe range. Stability here is not a new idea bolted on. It is the gauge
 symmetry put to work.
 
 Cross-entropy is computed as $\mathrm{logsumexp}(\vz) - z_y$ rather than

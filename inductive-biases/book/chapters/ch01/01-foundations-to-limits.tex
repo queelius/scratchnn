@@ -1,4 +1,4 @@
-% DEFINED:   sec:nn-as-function, sec:linear-limits, eq:residual
+% DEFINED:   sec:nn-as-function, sec:linear-limits, eq:residual, fig:xor-boundary
 % RESOLVED:  (none; first sections of the chapter)
 % FORWARD:   sec:mlp-backprop (Task 4), sec:logistic (Task 5), sec:softmax (Task 5)
 
@@ -110,7 +110,21 @@ fits all four points simultaneously.
 Geometrically: a linear classifier draws a single hyperplane in the
 input space (a line in $\R^2$). XOR's positive class
 $\{(0,1),(1,0)\}$ and negative class $\{(0,0),(1,1)\}$ lie at
-diagonal corners of the unit square. No line separates them.
+diagonal corners of the unit square. No line separates them, as the left
+panel of \Cref{fig:xor-boundary} shows.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.95\linewidth]{figures/ch01-xor-boundary}
+  \caption{XOR decision boundaries on the unit square (blue points are
+  class~0, red are class~1). \emph{Left}: a single linear unit (logistic
+  regression) draws only one straight boundary, collapses to
+  $p \approx 0.5$ everywhere, and cannot separate the diagonal classes.
+  \emph{Right}: a 2-8-1 \texttt{Tanh} MLP (\Cref{sec:mlp-backprop}) bends
+  the boundary and separates them. Same output head, different
+  architecture.}
+  \label{fig:xor-boundary}
+\end{figure}
 
 This was \textcite{minsky1969perceptrons}'s argument in 1969, which
 stalled the perceptron research program for a decade and a half. The
