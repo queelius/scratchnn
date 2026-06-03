@@ -4,4 +4,34 @@
 
 \section{Logits are log-probabilities, up to a constant}\label{sec:logits-logprobs}
 
-% TODO Task 6
+Take the log of the softmax from \Cref{sec:softmax}:
+\[
+  \log p_i = z_i - \log \sum_j e^{z_j}.
+\]
+The logits are \emph{not} the log-probabilities. They are the
+log-probabilities plus a shared additive term $\log \sum_j e^{z_j}$,
+the same for every class $i$. The logits are \textbf{unnormalized
+log-probabilities}.
+
+That constant cannot be recovered from $\vp$. Softmax is unchanged by
+adding any constant $c$ to every logit: $e^{z_i + c}$ has a factor
+$e^c$ on top and bottom, and it cancels. Training therefore can never
+pin the constant down. What training \emph{does} pin down is logit
+\textbf{differences}:
+\begin{equation}\label{eq:logodds}
+  z_i - z_j = \log p_i - \log p_j = \log \frac{p_i}{p_j},
+\end{equation}
+the log-odds between classes. The constant is \textbf{gauge}: free,
+unobservable, with no effect on the predicted distribution.
+
+One sharp way to see that logits are not raw log-probabilities: a
+probability is at most $1$, so a log-probability is at most $0$. But
+nothing stops a network's logits from being positive. Put a ReLU just
+before the output, and every logit is at least $0$. They still describe
+a perfectly good distribution, because the additive constant absorbs
+the offset. Logits live on a different scale than log-probabilities;
+only their differences are meaningful.
+
+This gauge freedom returns in \Cref{sec:stability} as the key to
+numerical stability: since softmax does not care about a shared shift,
+we can spend that freedom on keeping the exponentials in a safe range.
