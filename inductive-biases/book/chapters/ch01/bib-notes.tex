@@ -4,4 +4,37 @@
 
 \section*{Bibliographic Notes}
 
-% TODO Task 9
+The algebraic impossibility argument for XOR is from
+\textcite{minsky1969perceptrons}. Their book demonstrated that
+single-layer perceptrons cannot represent parity or connected figures,
+which redirected neural network research toward multi-layer
+architectures for the following decade.
+
+Universal approximation for shallow networks with sigmoidal activations
+was proved independently by \textcite{cybenko1989} and
+\textcite{hornik1989}. Both results apply to a single hidden layer of
+sufficient width; they say nothing about the efficiency of depth. The
+empirical case for depth over width is a separate (and still active)
+story.
+
+Backpropagation in the form the machine-learning community uses it was
+presented by \textcite{rumelhart1986backprop}, though the underlying
+chain-rule recursion was known earlier in control theory and
+numerical analysis.
+
+The UCI optical-recognition dataset (\cite{uci1998digits}) is the
+8$\times$8 image version derived from the handwritten-digits recordings
+at the National Institute of Standards and Technology. It ships with
+\texttt{sklearn.datasets.load\_digits} as a 1\,797-sample subset of the
+full UCI release.
+
+For the full story of automatic differentiation as a discipline distinct
+from symbolic and numerical differentiation, the survey by
+\textcite{baydin2018autodiff} is the standard reference. It places
+reverse-mode AD (which is what backpropagation is) in the context of
+the broader field and covers both the forward and reverse accumulation
+modes with worked examples.
+
+\textcite{goodfellow2016dlbook} covers the material of this chapter at
+book length, with particular depth on regularization, optimization, and
+the practical engineering of deep networks.
