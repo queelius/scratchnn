@@ -1,5 +1,5 @@
 % DEFINED:   sec:stability, sec:gradcheck, sec:autograd-note
-% RESOLVED:  sec:logits-logprobs, eq:logodds, sec:mlp-backprop
+% RESOLVED:  sec:logits-logprobs, eq:logodds
 % FORWARD:   (none)
 
 \section{Numerical stability is the gauge freedom, reused}\label{sec:stability}
@@ -86,7 +86,7 @@ This is too slow to train with: one forward pass per parameter. But it is
 the ground truth that keeps the fast method honest. It works for
 \emph{any} layer and loss because it only ever touches
 \texttt{parameters()}, \texttt{forward}, and \texttt{backward}. Running
-it on the four configurations from \Cref{sec:mlp-backprop} (seed~42):
+it on four configurations (seed~42):
 
 \begin{itemize}
 \item Logistic regression (SigmoidBCE): worst relative error $\approx 6 \times 10^{-12}$

@@ -9,7 +9,10 @@ the \textbf{logit}:
 \[
   z = \vw \cdot \vx + b.
 \]
-It squashes that score into a probability with the \textbf{sigmoid}:
+Here $\vw$ and $b$ are a single weight vector and a scalar bias, the
+one-output specialization of the $W \vx + \mathbf{b}$ from
+\Cref{sec:linear-limits}. It squashes that score into a probability with
+the \textbf{sigmoid}:
 \[
   p = \sigma(z) = \frac{1}{1 + e^{-z}}.
 \]
