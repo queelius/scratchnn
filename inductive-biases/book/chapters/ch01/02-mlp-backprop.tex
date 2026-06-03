@@ -1,7 +1,163 @@
 % DEFINED:   sec:mlp-backprop, eq:linear-grads
 % RESOLVED:  sec:linear-limits, sec:nn-as-function
-% FORWARD:   (none; intra-chapter refs resolved after Task 4)
+% FORWARD:   sec:gradcheck (Task 8)
 
-\section{The multilayer perceptron, and what depth and non-linearity buy}\label{sec:mlp-backprop}
+\section{The multilayer perceptron, and what depth and non-linearity buy}%
+\label{sec:mlp-backprop}
 
-% TODO Task 4
+The multilayer perceptron (MLP) stacks \texttt{Linear} layers with a
+non-linear \textbf{activation} between them (\texttt{Tanh} or
+\texttt{ReLU}). Without the non-linearity, stacked linear maps collapse:
+two affine maps composed are again affine, and no number of stacked
+\texttt{Linear} layers without non-linearities buys anything over one.
+The fix from \Cref{sec:linear-limits} is therefore not to add more
+linear layers; it is to add a single non-linear layer between them.
+
+\begin{lstlisting}
+mlp = Network([Linear(2, 8), Tanh(),
+               Linear(8, 1)], loss=SigmoidBCE())
+mlp.fit(xor_X, xor_Y, epochs=4000, lr=0.5, batch_size=4)
+\end{lstlisting}
+
+Training this 2-8-1 network on XOR (seed~42) reaches a final loss below
+$0.001$: the MLP fits XOR exactly. Mechanically, the hidden layer
+constructs intermediate features that \emph{are} linearly separable. One
+natural decomposition for XOR is
+\[
+  \mathrm{XOR}(x_1, x_2) = \mathrm{OR}(x_1, x_2) - \mathrm{AND}(x_1, x_2),
+\]
+so a hidden unit detecting OR and another detecting AND give the output
+layer a linearly separable problem. The training run discovers something
+equivalent.
+
+The general fact is the \textbf{universal approximation theorem}
+(\cite{cybenko1989}; \cite{hornik1989}): a feedforward network with one
+hidden layer of sufficient width and any non-polynomial activation can
+approximate any continuous function on a compact set to arbitrary
+precision. \emph{Depth is not required for expressivity.} One hidden
+layer suffices. What deeper networks buy is \emph{efficient}
+representation: many natural functions that one wide hidden layer can
+approximate at exponential cost are representable at polynomial cost
+with a few stacked hidden layers. That is the empirical case for depth;
+the theoretical case for hidden layers at all is XOR.
+
+\subsection*{Backpropagation as the local chain rule}
+
+The training rule for an MLP is \textbf{backpropagation}. The trick is
+to make the chain rule \emph{local}: each layer implements
+\texttt{forward} (input to output) and \texttt{backward} (gradient with
+respect to the output, to gradient with respect to the input), plus
+\texttt{parameters}, which exposes its weights and their gradients. A
+layer never sees the rest of the network. That contract is the entire
+base class:
+
+\begin{lstlisting}
+class Layer:
+    def forward(self, x):
+        raise NotImplementedError
+
+    def backward(self, g):
+        """Given g = dL/d(output), return dL/d(input).
+        Layers with parameters also accumulate their parameter grads."""
+        raise NotImplementedError
+
+    def parameters(self):
+        """A list of (values, grads) pairs: each a parameter vector
+        and its same-length gradient vector."""
+        return []
+\end{lstlisting}
+
+\texttt{Linear} ($\vy = W\vx + \mathbf{b}$) is the only layer with
+parameters. Its \texttt{backward} writes out three gradients:
+\begin{equation}\label{eq:linear-grads}
+  \frac{\partial L}{\partial W_{ij}} = g_i x_j,
+  \qquad
+  \frac{\partial L}{\partial b_i} = g_i,
+  \qquad
+  \frac{\partial L}{\partial x_j} = \sum_i W_{ij}\, g_i.
+\end{equation}
+That is exactly what the code says. Note the \texttt{+=}: parameter
+gradients \emph{accumulate}, so a mini-batch can sum per-example
+contributions before the optimizer steps.
+
+\begin{lstlisting}
+class Linear(Layer):
+    def forward(self, x):
+        self.x = x
+        return [dot(w, x) + b for w, b in zip(self.weights, self.bias)]
+
+    def backward(self, g):
+        for i, gi in enumerate(g):
+            for j, xj in enumerate(self.x):
+                self.dweights[i][j] += gi * xj     # dL/dW_ij = g_i x_j
+            self.dbias[i] += gi                    # dL/db_i  = g_i
+        return [sum(self.weights[i][j] * g[i] for i in range(len(g)))
+                for j in range(len(self.x))]       # dL/dx_j = sum_i W_ij g_i
+\end{lstlisting}
+
+There is no matrix type. A vector is a \texttt{list[float]}, \texttt{dot}
+is the only named helper, and the outer product and transposed mat-vec
+above are written inline as comprehensions. The two activations are
+smaller still, each matching the derivatives one-to-one ($1 - \tanh^2$
+for \texttt{Tanh}, the positive-part mask for \texttt{ReLU}):
+
+\begin{lstlisting}
+class Tanh(Layer):
+    def forward(self, x):
+        self.out = [math.tanh(xi) for xi in x]
+        return self.out
+    def backward(self, g):
+        return [gi * (1.0 - oi * oi) for gi, oi in zip(g, self.out)]
+
+class ReLU(Layer):
+    def forward(self, x):
+        self.positive = [xi > 0.0 for xi in x]
+        return [xi if xi > 0.0 else 0.0 for xi in x]
+    def backward(self, g):
+        return [gi if p else 0.0 for gi, p in zip(g, self.positive)]
+\end{lstlisting}
+
+The \texttt{Network} threads these together. \texttt{forward} runs the
+layers in order and caches the logits; \texttt{backward} seeds the
+gradient from the loss and pushes it back through the layers in reverse:
+
+\begin{lstlisting}
+class Network:
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        self.logits = x
+        return x
+
+    def backward(self, y):
+        g = self.loss.grad(self.logits, y)    # the familiar p - y
+        for layer in reversed(self.layers):
+            g = layer.backward(g)
+        return g
+\end{lstlisting}
+
+The optimizer is written \emph{once}, generically, on top of
+\texttt{parameters()}. There is no per-layer \texttt{step} and no
+\texttt{Optimizer} class. \texttt{zero\_grad} clears every gradient;
+\texttt{step} applies the \emph{mean} gradient over a batch of $n$ by
+dividing by $n$, which is the counterpart to the accumulating
+\texttt{+=} in \texttt{backward}:
+
+\begin{lstlisting}
+    def zero_grad(self):
+        for _values, grads in self.parameters():
+            for k in range(len(grads)):
+                grads[k] = 0.0
+
+    def step(self, lr, n):
+        for values, grads in self.parameters():
+            for k in range(len(values)):
+                values[k] -= (lr / n) * grads[k]
+\end{lstlisting}
+
+The key realization: the MLP introduced \textbf{no new math} beyond what
+a single linear unit needed. The chain rule applied locally, composed
+across layers, gives gradients for any depth. Depth is just more
+composition of the same local steps, and the optimizer never has to know
+how many layers there are. \Cref{sec:gradcheck} verifies all this
+numerically.
