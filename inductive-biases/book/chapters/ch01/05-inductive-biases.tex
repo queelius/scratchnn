@@ -1,8 +1,92 @@
 % DEFINED:   sec:inductive-biases
 % RESOLVED:  sec:softmax
-% FORWARD REFS (prose-only): Chapter 2 (output-head axis),
-%             Part II (architecture axis), Chapter 8 (RL)
+% FORWARD REFS (prose-only, no \Cref): Chapter 2 on output heads,
+%   Part II on architecture (CNN, fixed-context LM, RNN, Transformer),
+%   Chapter 8 on reinforcement learning
 
 \section{Inductive biases}\label{sec:inductive-biases}
 
-% TODO Task 7
+The MLP on digits is essentially saturated at 97.2\% test accuracy
+(seed~42, 80/20 split). Adding more hidden units or more layers does not
+close the gap to 100\%. The model is plenty expressive: it fits the
+training set to 99.3\%. The bottleneck is not capacity. It is the
+\textbf{prior} the architecture and the loss commit to.
+
+Inductive bias enters at two distinct points in every supervised model:
+
+\begin{enumerate}
+\item \textbf{The output head}: a choice of link function and matching
+  loss. Identity plus MSE assumes Gaussian targets; sigmoid plus BCE
+  assumes Bernoulli; softmax plus cross-entropy assumes Categorical. The
+  link function is a prior about the data-generating process on the
+  output side. Chapter~2 takes this axis up in depth.
+\item \textbf{The architecture}: a choice of how the network computes
+  features. An MLP assumes every input feature is independent of every
+  other and learns their relationships from data. A convolutional network
+  assumes nearby pixels matter together and the same detector should fire
+  anywhere. A recurrent network assumes the same computation runs at every
+  step of a sequence. A Transformer assumes positions interact pairwise
+  through attention. Part~II of this book walks through each of these
+  priors.
+\end{enumerate}
+
+Both axes are inductive biases. Both improve sample efficiency when
+matched to the data and hurt when mismatched. The two are independent:
+any architecture can pair with any output head, as long as the head's
+input dimension matches the architecture's output.
+
+For the 64 pixels of a digit, the MLP architecture says every feature
+is independent of every other. That is a strong claim, and it happens to
+be wrong. Pixel $(3, 4)$ and pixel $(3, 5)$ are neighbors; the MLP
+treats them as completely unrelated and has to relearn their
+relationship from 1\,437 examples. Pixel $(3, 4)$ and pixel $(7, 0)$
+are unrelated, but the MLP cannot tell that apart from $(3, 4)$ and
+$(3, 5)$ either.
+
+Different architectures commit to different invariances:
+
+\begin{itemize}
+\item A \textbf{convolutional network} (CNN) commits to \textbf{locality}
+  and \textbf{translation equivariance}: nearby pixels matter together,
+  and a feature detector that fires at one position should fire at any
+  position. The right prior for image data.
+\item An \textbf{RNN} commits to \textbf{time-translation equivariance}:
+  the same computation runs at every step of a sequence, and the hidden
+  state summarizes the past. The right prior for sequential data.
+\item A \textbf{Transformer} commits to \textbf{permutation equivariance}
+  over positions, with positional encoding added back to recover a
+  sequence prior. Pairwise interactions are explicit through attention
+  rather than recurrence.
+\end{itemize}
+
+These are bets. A CNN beats an MLP on images \emph{because} its prior
+matches the data. On tabular data with no spatial structure, a CNN loses
+to an MLP, because the spatial prior is wrong. The right prior is
+empirical, not universal.
+
+There is a data-side counterpart. \textbf{Data augmentation} expresses
+the same prior from the data side instead of the architecture side.
+Random rotations of training images approximate the prior ``the answer
+should not depend on rotation'' through the loss: a rotation-equivariant
+architecture and rotation-augmented data are two routes to the same
+prior, and they often compose.
+
+A concrete illustration for digits: a single $3 \times 3$ convolutional
+filter applied across the $8 \times 8$ image with 16 output channels has
+\textbf{160 parameters}. The MLP we trained has \textbf{2\,410
+parameters}. The CNN ends up beating the MLP with one-fifteenth the
+parameters, \emph{because} it has committed to the right prior and does
+not have to learn translation invariance from scratch for every position.
+That is the whole story of inductive bias in one number. (The exact
+counts are computed in the paired notebook, not asserted.)
+
+When you do not know the structure, an MLP is the safe bet on the
+architecture side and identity plus MSE is the safe bet on the output
+side: both commit to nothing, and pay for that with data efficiency.
+
+The next chapter takes up the output-head axis in full: how each output
+head corresponds to a distributional assumption about the target, why the
+$p - y$ gradient recurs, and how the two axes compose. The architecture
+axis runs through Part~II. A closing chapter on reinforcement learning
+asks how much of this inductive-bias frame survives the shift from
+supervised learning to learning from scalar reward.
