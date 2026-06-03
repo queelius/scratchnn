@@ -4,7 +4,16 @@ LATEX = pdflatex -interaction=nonstopmode -halt-on-error
 
 all: $(BOOK).pdf
 
-$(BOOK).pdf: $(BOOK).tex preamble.tex alex.sty references.bib parts/*.tex
+# Depend on every source subfile so edits to chapters/frontmatter/figures
+# trigger a rebuild. The old list named only parts/*.tex, so chapter edits
+# left book.pdf stale. Use $(wildcard) so empty globs vanish instead of
+# becoming literal (missing) prerequisites.
+SOURCES = $(BOOK).tex preamble.tex alex.sty references.bib \
+          $(wildcard parts/*.tex) $(wildcard chapters/*.tex) \
+          $(wildcard chapters/*/*.tex) $(wildcard frontmatter/*.tex) \
+          $(wildcard appendices/*.tex) $(wildcard figures/*)
+
+$(BOOK).pdf: $(SOURCES)
 	$(LATEX) $(BOOK).tex
 	biber $(BOOK)
 	$(LATEX) $(BOOK).tex
