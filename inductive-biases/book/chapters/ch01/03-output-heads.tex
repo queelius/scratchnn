@@ -4,8 +4,130 @@
 
 \section{Logistic regression}\label{sec:logistic}
 
-% TODO Task 5
+A logistic-regression model scores an input $\vx$ with a weighted sum,
+the \textbf{logit}:
+\[
+  z = \vw \cdot \vx + b.
+\]
+It squashes that score into a probability with the \textbf{sigmoid}:
+\[
+  p = \sigma(z) = \frac{1}{1 + e^{-z}}.
+\]
+Here $p$ is the model's estimate of $P(y = 1 \mid \vx)$. The loss that
+penalizes disagreement between $p$ and a binary label $y \in \{0, 1\}$
+is \textbf{binary cross-entropy} (BCE):
+\[
+  L = -\bigl[y \log p + (1-y) \log(1-p)\bigr].
+\]
+Differentiating with respect to the logit $z$ gives a clean result:
+\begin{equation}\label{eq:py-binary}
+  \frac{\partial L}{\partial z} = p - y.
+\end{equation}
+Prediction minus target. Every weight gradient follows by the chain
+rule, $\partial L / \partial w_j = (p - y)\, x_j$, and we descend:
+$\vw \leftarrow \vw - \eta\, \partial L / \partial \vw$.
+
+In code, logistic regression is one \texttt{Linear} layer with a
+\texttt{SigmoidBCE} loss:
+\begin{lstlisting}
+net = Network([Linear(n_features, 1)], loss=SigmoidBCE())
+\end{lstlisting}
+The loss owns the output activation. The \texttt{Network} emits the raw
+logit; \texttt{SigmoidBCE} turns it into a probability and a gradient.
+Its \texttt{grad} is the $p - y$ of \Cref{eq:py-binary}; its
+\texttt{value} computes binary cross-entropy straight from the logit in a
+numerically stable form (discussed in \Cref{sec:stability}), never by
+first forming $p$ and taking a log:
+
+\begin{lstlisting}
+class SigmoidBCE(Loss):
+    def value(self, logits, y):
+        z = logits[0]
+        # max(z,0) - z*y + log1p(exp(-|z|))
+        return max(z, 0.0) - z * y + math.log1p(math.exp(-abs(z)))
+
+    def grad(self, logits, y):
+        return [sigmoid(logits[0]) - y]      # p - y
+
+    def probs(self, logits):
+        return [sigmoid(logits[0])]
+\end{lstlisting}
+
+This is structurally the same SLP from \Cref{sec:linear-limits}, with a
+probability interpretation. The SLP's limits still apply: logistic
+regression can solve any linearly separable binary classification but
+cannot solve XOR. To solve XOR with sigmoid output, swap the body for
+the MLP from \Cref{sec:mlp-backprop}:
+\begin{lstlisting}
+net = Network([Linear(2, 8), Tanh(),
+               Linear(8, 1)], loss=SigmoidBCE())
+\end{lstlisting}
+The output head (sigmoid + BCE) and the architecture (linear vs.~MLP)
+are independent choices, a theme that becomes the load-bearing principle
+of \Cref{sec:inductive-biases}.
 
 \section{Multi-class regression via softmax}\label{sec:softmax}
 
-% TODO Task 5
+With $K$ classes the model produces $K$ logits, one weighted sum per
+class. The logit vector $\vz$ becomes a probability distribution through
+the \textbf{softmax}:
+\[
+  p_i = \frac{e^{z_i}}{\sum_j e^{z_j}}.
+\]
+The matching loss is \textbf{categorical cross-entropy}, $L = -\log p_y$,
+where $y \in \{0, \ldots, K-1\}$ is the index of the correct class. Its
+gradient with respect to the logits is, again:
+\begin{equation}\label{eq:py-softmax}
+  \frac{\partial L}{\partial z_i} = p_i - \mathbf{1}[i = y].
+\end{equation}
+That is $\vp - \vy$ with $\vy$ read as a one-hot vector. The same
+expression as the binary case (\Cref{eq:py-binary}). That is no
+coincidence: binary logistic regression \emph{is} two-class softmax with
+one logit pinned to zero (softmax depends only on logit differences, so
+one logit may be fixed freely). The binary sigmoid is the $K = 2$
+softmax in disguise.
+
+In code, softmax regression is one \texttt{Linear} layer with a
+categorical head:
+\begin{lstlisting}
+net = Network([Linear(n_features, K)], loss=SoftmaxCrossEntropy())
+\end{lstlisting}
+The head mirrors \texttt{SigmoidBCE} exactly, one level up. \texttt{value}
+uses the stable $\mathrm{logsumexp}(\vz) - z_y$ form of
+$-\log \mathrm{softmax}(\vz)_y$; \texttt{grad} is $\vp$ with $1$
+subtracted at the true class:
+
+\begin{lstlisting}
+class SoftmaxCrossEntropy(Loss):
+    def value(self, logits, y):
+        # Stable: logsumexp(z) - z[y]
+        return logsumexp(logits) - logits[y]
+
+    def grad(self, logits, y):
+        p = softmax(logits)
+        p[y] -= 1.0
+        return p
+
+    def probs(self, logits):
+        return softmax(logits)
+\end{lstlisting}
+
+On the 8$\times$8 UCI optical-recognition digits
+(1\,437 training, 360 test, 10 classes, stratified 80/20 split,
+seed~42), this one-layer softmax model reaches \textbf{94.4\%} test
+accuracy after 30 epochs of mini-batch SGD. Linear classifiers on this
+dataset are unexpectedly competitive, which is itself a hint about the
+data: the $4 \times 4$ block-counting that produced these 8$\times$8
+features has already done most of the work.
+
+Swap the body for an MLP:
+\begin{lstlisting}
+net = Network([Linear(64, 32), Tanh(),
+               Linear(32, 10)], loss=SoftmaxCrossEntropy())
+\end{lstlisting}
+This 64-32-10 MLP reaches \textbf{97.2\%} test accuracy after 50 epochs.
+The MLP fits the training set to \textbf{99.3\%} and generalizes
+somewhat worse; the gain over the linear classifier is real but modest
+(2.8 percentage points). Why is the gap so small, given that the MLP is
+so much more expressive than logistic regression? The answer is in
+\Cref{sec:inductive-biases}.
