@@ -127,7 +127,8 @@ net = Network([Linear(64, 32), Tanh(),
 \end{lstlisting}
 This 64-32-10 MLP reaches \textbf{97.2\%} test accuracy after 50 epochs.
 The MLP fits the training set to \textbf{99.3\%} and generalizes
-somewhat worse; the gain over the linear classifier is real but modest
-(2.8 percentage points). Why is the gap so small, given that the MLP is
-so much more expressive than logistic regression? The answer is in
+somewhat worse; it roughly halves the linear model's test error, from
+5.6\% to 2.8\%, a real gain but a smaller one than its far greater
+expressivity might promise. Why is the gain not larger, given how much
+more expressive the MLP is than logistic regression? The answer is in
 \Cref{sec:inductive-biases}.
