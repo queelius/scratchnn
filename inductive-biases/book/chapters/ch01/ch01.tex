@@ -1,0 +1,27 @@
+% DEFINED:   ch:foundations
+% RESOLVED:  (none in this wrapper)
+% FORWARD:   sec:nn-as-function, sec:linear-limits, sec:mlp-backprop,
+%            sec:logistic, sec:softmax, sec:logits-logprobs,
+%            sec:inductive-biases, sec:stability, sec:gradcheck,
+%            sec:autograd-note
+
+\chapter{Foundations: Function Approximation and the Multilayer Perceptron}%
+\label{ch:foundations}
+
+Throughout this chapter (and the chapters that follow) we are doing
+\textbf{supervised learning}: we have labeled $(x, y)$ pairs and learn $f$
+such that $f(x) \approx y$. The labels can come from humans (classical
+supervised) or from the data's own structure (self-supervised, as in
+language modeling). Both are mathematically the same. What differs across
+sections is the \emph{interpretation} of the output: the choice of
+output activation (link function) and matching loss.
+
+The network produces raw values. The output's meaning is the loss's job.
+
+\input{chapters/ch01/01-foundations-to-limits}
+\input{chapters/ch01/02-mlp-backprop}
+\input{chapters/ch01/03-output-heads}
+\input{chapters/ch01/04-logits-logprobs}
+\input{chapters/ch01/05-inductive-biases}
+\input{chapters/ch01/06-stability-to-autograd}
+\input{chapters/ch01/bib-notes}

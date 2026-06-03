@@ -1,7 +1,14 @@
 \part{Foundations}
 
-% Chapters are added under book/chapters and \input here, for example:
-%   \input{chapters/01-foundations.tex}
-%
-% Use /bookwright:design to plan this part's chapters, then
-% /bookwright:write to draft them.
+Before a network can carry a useful bias, it has to represent functions
+at all. Part~I builds that floor. Chapter~1 starts from function
+approximation with no constraints, shows why a single linear unit
+cannot separate XOR, and recovers the multilayer perceptron as the
+smallest fix. Chapter~2 introduces the first inductive bias proper: the
+output head. A loss is a prior over the response distribution, and the
+same network body becomes a classifier, a count model, or a regressor
+depending only on the head bolted onto it. The two axes that organize
+the rest of the book, architecture and output head, both make their
+first appearance here.
+
+\input{chapters/ch01/ch01}

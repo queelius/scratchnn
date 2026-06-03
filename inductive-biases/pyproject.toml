@@ -7,6 +7,7 @@ dependencies = [
     "jupyter",
     "numpy",
     "matplotlib",
+    "scikit-learn",
 ]
 
 # The book's pure-Python library lives in the parent repo; install it editable
