@@ -32,7 +32,7 @@ Five canonical pairings, each a member of the exponential family with its
 \textbf{canonical link} (the link that makes the gradient come out
 cleanest, as \Cref{sec:canonical-link} will prove):
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \begin{tabular}{llll}
 \toprule
@@ -60,3 +60,8 @@ The link maps the network's unconstrained raw output $z \in \mathbb{R}$
 into a valid parameter for the distribution: a real mean for Gaussian, a
 probability in $[0, 1]$ for Bernoulli, a probability vector on the simplex
 for Categorical, a positive rate for Poisson.
+
+This chapter develops Poisson in full and points to Beta and MDN as natural
+extensions. The Gamma row follows the same recipe (positive-support
+reciprocal link, Gamma NLL) and is a further natural extension; it is
+included in the catalogue for completeness but not developed here.

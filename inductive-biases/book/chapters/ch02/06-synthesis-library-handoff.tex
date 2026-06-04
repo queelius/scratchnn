@@ -4,33 +4,16 @@
 
 \section{Inductive bias, the parallel axis}\label{sec:parallel-axes}
 
-\Cref{sec:inductive-biases} in Chapter~1 named two axes at which the
-prior enters a supervised model and previewed the synthesis. This section
-completes it.
-
-\textbf{The two axes, stated precisely:}
-
-\begin{itemize}
-\item \textbf{Architecture.} A prior over how the network computes
-  features: which inputs interact, at what resolution, with what
-  sharing. An MLP assumes every input is independent of every other and
-  must learn all relationships from data. A convolutional network assumes
-  nearby positions matter together and the same detector should fire
-  anywhere. A recurrent network assumes the same computation runs at
-  every step of a sequence. A Transformer assumes positions interact
-  pairwise through learned, content-addressable lookup.
-\item \textbf{Output head.} A prior over the distribution of $y$ given
-  the network's raw output: which family of distributions is plausible,
-  and what the link function maps the unconstrained output into.
-\end{itemize}
-
-The two axes are \emph{independent and composable}. Any architecture can
-pair with any output head, provided the head's input dimension matches
-the architecture's output. The composability is literal: the
-\texttt{Network} class takes a list of layers and a loss; the layers are
-the body (any architecture), the loss is the head (any output
-distribution). Nothing in the body knows about the head, and nothing in
-the head knows about the body.
+\Cref{sec:inductive-biases} in Chapter~1 named the two axes at which
+prior knowledge enters a supervised model and deferred the full synthesis.
+The preceding eight sections have developed the output-head axis in
+detail. The two axes are \emph{independent and composable}: any
+architecture pairs with any output head, provided the head's input
+dimension matches the architecture's output. The composability is
+literal: the \texttt{Network} class takes a list of layers and a loss;
+the layers are the body (any architecture), the loss is the head (any
+output distribution). Nothing in the body knows about the head, and
+nothing in the head knows about the body.
 
 \textbf{The composability matrix.} Four concrete examples that cross
 body type with head type:
@@ -128,7 +111,7 @@ only; all have a \texttt{gradient\_check} case.
 \end{itemize}
 
 Gradient-check residuals on a Tanh MLP (seed~42): MSE
-$2.3 \times 10^{-10}$, Poisson $9.6 \times 10^{-11}$, Gaussian
+$9.7 \times 10^{-10}$, Poisson $1.5 \times 10^{-10}$, Gaussian
 $1.1 \times 10^{-10}$. All well below the $10^{-4}$ tolerance.
 
 Not in the library: Beta NLL and the MDN. Both are natural extensions

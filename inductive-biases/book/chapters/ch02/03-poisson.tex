@@ -1,5 +1,5 @@
 % DEFINED:   sec:poisson, fig:ch02-poisson
-% RESOLVED:  thm:canonical-link
+% RESOLVED:  thm:canonical-link, sec:gradcheck
 % FORWARD:   (none)
 
 \section{Count data: log link and Poisson NLL}\label{sec:poisson}
@@ -21,6 +21,10 @@ clamping or projection.
 The $\log y!$ term does not depend on $z$ and drops from the gradient.
 For the loss value during optimization we omit it as well (it shifts the
 loss by a $y$-dependent constant but does not affect the optimum).
+The comparative NLL values reported in the experiment likewise omit
+$\log y!$; the constant cancels in model-to-model comparisons on the
+same test set, so the values are valid for relative comparison but
+should not be compared against literature benchmarks that include it.
 
 \textbf{Gradient:}
 \[
@@ -58,39 +62,41 @@ class PoissonNLLLoss(Loss):
 
 Ten lines; same hand-derived backward as the other losses.
 The gradient check in \Cref{sec:gradcheck} passes at
-$9.6 \times 10^{-11}$ for this loss on a Tanh MLP.
+$1.5 \times 10^{-10}$ for this loss on a Tanh MLP.
 
 \textbf{Worked experiment.} A 1-D regression where the true rate is
 non-monotonic: $\lambda(x) = \max(0.1,\, 2 + 5\sin(\pi x))$ for
 $x \in [0, 2]$. Targets are Poisson counts. Two identical bodies
 ($1 \to 16 \to 1$, Tanh hidden), one with identity plus MSE and one
-with log plus Poisson NLL (data seed~42, model seed~42, 200 epochs).
+with log plus Poisson NLL (data seed~0, model seed~0, 80 epochs).
 See \Cref{fig:ch02-poisson}.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics[width=0.75\linewidth]{figures/ch02-poisson.pdf}
   \caption{Poisson versus MSE head on count regression.
     True rate $\lambda(x)$ (black), MSE prediction (blue dashed),
-    Poisson NLL prediction (red). Both heads track the mean, but
-    the MSE model reaches a minimum predicted rate of $-0.351$,
-    producing 45 negative-rate predictions on a 201-point grid.
-    The Poisson model's minimum is $0.249$; it cannot predict
-    negative rates by construction.}
+    Poisson NLL prediction (red). Both heads track the mean; neither
+    predicts negative rates on a fine grid. The MSE model's minimum
+    predicted rate is $0.152$ and the Poisson model's is $0.139$.
+    The Poisson head cannot predict negative rates by construction;
+    the MSE head happens not to here, but carries no such guarantee.}
   \label{fig:ch02-poisson}
 \end{figure}
 
 \textbf{Findings, honestly.} On this benign synthetic dataset both
-models fit the conditional mean reasonably well. What matters is the
-\emph{structural} difference:
+models fit the conditional mean reasonably well. Neither predicts
+negative rates on a fine grid, because the Tanh activations keep
+predictions in a sensible range.
 
 \begin{itemize}
 \item The MSE model's minimum predicted rate on a 201-point grid is
-  $-0.351$; 45 of those 201 predictions are negative. The Poisson
-  model's minimum is $0.249$; it has zero negative predictions.
-  The Poisson head cannot predict negative rates by construction.
-\item The MSE model could predict any negative number if the training
-  data were less benign; the Poisson model cannot, ever.
+  $0.152$; the Poisson model's minimum is $0.139$. Both have zero
+  negative predictions here. The Poisson head cannot predict negative
+  rates by construction; the MSE head has no such guarantee.
+\item The MSE model will predict negative rates if the data are less
+  benign (sparser counts, more extreme non-monotonicity, or a
+  different random seed). The Poisson model cannot, ever.
 \item On a count dataset where many observations are zero (rare events),
   the MSE model genuinely fails: it pays MSE penalty for being slightly
   positive on average, and its predictions cross zero. The Poisson head
@@ -103,6 +109,7 @@ variance, which is wrong for counts where small means have small
 variance and large means have large variance. On a benign dataset this
 matters less; on real count data it can matter a great deal.
 
-Use the matching head because the matching head encodes the structural
-constraint, even when on a benign dataset the constraint would not have
-been violated anyway.
+Use the matching head as structural insurance even when, as here,
+the constraint was not violated on this dataset. The guarantee holds
+regardless of the data; the MSE model's accidental non-negativity
+does not.

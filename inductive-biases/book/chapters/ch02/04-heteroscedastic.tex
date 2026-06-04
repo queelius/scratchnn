@@ -106,7 +106,7 @@ identical body ($1 \to 16 \to 1$ for MSE, $1 \to 16 \to 2$ for
 heteroscedastic), data seed~0, model seed~0, 300 epochs.
 See \Cref{fig:ch02-heteroscedastic}.
 
-\begin{figure}[h]
+\begin{figure}[ht]
   \centering
   \includegraphics[width=0.92\linewidth]{figures/ch02-heteroscedastic.pdf}
   \caption{MSE head versus heteroscedastic Gaussian head.
@@ -120,7 +120,7 @@ See \Cref{fig:ch02-heteroscedastic}.
 
 \textbf{Findings:}
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \begin{tabular}{r r r r r r}
 \toprule
@@ -135,19 +135,20 @@ $x$ & true $\mu$ & true $\sigma$ & MSE pred & het $\mu$ & het $\sigma$ \\
 \bottomrule
 \end{tabular}
 \caption{Predictions at six query points. The heteroscedastic model
-  recovers the input-dependent $\sigma$ within 10--15\% across the
+  recovers the input-dependent $\sigma$ within 10--16\% across the
   range. The MSE model has no $\sigma$ at all.}
 \end{table}
 
-The heteroscedastic model tracks the true $\sigma$ within 10--15\%
-across the range. The MSE model has no $\sigma$ at all; it only predicts
+The heteroscedastic model tracks the true $\sigma$ within 10--16\%
+across the range (worst case at $x = 5.5$: predicted $1.625$ versus
+true $1.933$). The MSE model has no $\sigma$ at all; it only predicts
 the mean.
 
 To compare on equal footing: fit a single global $\sigma$ for the MSE
 model post-hoc (the RMS training residual), then compute Gaussian NLL on
 the test set under each model's predicted distribution.
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \begin{tabular}{lr}
 \toprule
@@ -158,6 +159,9 @@ Heteroscedastic head & 0.509 \\
 \bottomrule
 \end{tabular}
 \caption{Test Gaussian NLL on 200 held-out samples (lower is better).
+  Both values omit the $\tfrac{1}{2}\log(2\pi)$ constant, which cancels
+  in the comparison; they are valid for relative ranking but should not
+  be compared to benchmarks that include the constant.
   Numbers regenerated from the paired notebook with seed~0.}
 \end{table}
 
