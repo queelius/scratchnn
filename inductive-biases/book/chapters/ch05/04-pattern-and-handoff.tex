@@ -1,12 +1,67 @@
 % DEFINED:   sec:rnn-pattern, sec:rnn-handoff
 % RESOLVED:  ch:cnn, sec:mlp-backprop (backward into Part II and Part I)
 % FORWARD (prose-only): Chapter 6 (the Transformer, "the next chapter").
-%            Not drafted yet; stays prose.
+%            Not drafted yet; stays prose, no \Cref.
 
 \section{The pattern repeats}\label{sec:rnn-pattern}
 
-(placeholder)
+Three architectures now sit on the table, and they line up along one idea.
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Architecture & Weight-sharing axis & Equivariance \\
+\midrule
+MLP & none & input permutation \\
+CNN & spatial position & 2-D translation in space \\
+RNN & timestep & 1-D translation in time \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The recipe is the same each time. Identify a symmetry the data respects.
+Wire it into the architecture by reusing one set of weights along the axis
+the symmetry runs along. Three things follow at once. The parameter count
+drops, because one shared operator replaces a separate operator per
+position. The data efficiency rises, because what the model learns at one
+position transfers to all the others for free. And the backward pass becomes
+a \texttt{+=} accumulation along the shared axis, the pattern the library has
+carried since the \texttt{Linear} layer of \Cref{sec:mlp-backprop}: across
+examples in a mini-batch, then across spatial positions in a convolution of
+\Cref{ch:cnn}, then across timesteps in a recurrent unroll. One operation,
+three grains.
+
+What the recurrent network buys over a fixed-context model, for sequence
+data, is the state. Information can in principle flow from an arbitrarily
+distant past input through the hidden vector, where a fixed window simply
+cannot reach past its edge. What it costs is the vanishing-gradient problem.
+The state is a single fixed-width vector that every past input has to pass
+through, and the gradient that would teach the model to use a distant input
+has to survive a long product of Jacobians to get back there. The reach is
+unbounded in principle and limited in practice, and the limit is structural,
+not a matter of more training.
 
 \section{Handoff to the Transformer}\label{sec:rnn-handoff}
 
-(placeholder)
+The next chapter takes the other path. Rather than squeezing the past
+through a sequential state, the Transformer lets every position attend to
+every other position directly, in a single layer. That one move changes
+three things at once. It removes the long Jacobian product, because there is
+no recurrence to backpropagate through, so the vanishing-gradient problem of
+this chapter goes away. It restores parallelism over the sequence, because
+without a state to thread, the positions no longer have to be processed in
+order. And it trades time-translation equivariance for permutation
+equivariance over positions, which then has to be partly broken back with a
+positional encoding so the model can still tell ``the cat ate the mouse''
+from ``the mouse ate the cat.''
+
+That is a different bet about which symmetries a sequence respects. The
+recurrent network commits to time-translation equivariance and a running
+state, and pays with sequential training and a fragile gradient. The
+Transformer commits to permutation equivariance, breaks it deliberately with
+a positional encoding, and pays with a cost that grows quadratically in the
+sequence length. Both are entries on the same menu of architectural priors,
+and the right one is the one whose assumptions match the data. The next
+chapter builds the Transformer from the same pure-derivation, real-code
+footing this one used, and asks what content-addressable attention buys that
+a state cannot.
