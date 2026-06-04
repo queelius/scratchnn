@@ -1,7 +1,36 @@
 % DEFINED:   (no new labels)
-% RESOLVED:  cite keys added in Task 7
+% RESOLVED:  cite keys: elman1990, werbos1990bptt, hochreiter1991,
+%            bengio1994longterm, hochreiter1997lstm, cho2014gru
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
 
-(placeholder)
+The recurrent network in the form used here, a hidden state updated by a
+shared computation at every step, is due to \textcite{elman1990},
+\emph{Finding Structure in Time}, which introduced the simple recurrent
+network and showed that the hidden state learns to encode temporal context
+without being told the structure in advance. Backpropagation through time,
+the unroll-and-chain-rule procedure of \Cref{sec:bptt}, is laid out by
+\textcite{werbos1990bptt}, whose title, \emph{Backpropagation Through Time:
+What It Does and How to Do It}, is an accurate summary of the method.
+
+The vanishing-gradient problem of \Cref{sec:vanishing-gradients} was
+identified early. \textcite{hochreiter1991} first analyzed it in a diploma
+thesis, and \textcite{bengio1994longterm}, \emph{Learning Long-term
+Dependencies with Gradient Descent is Difficult}, gave the argument its
+standard form: the gradient through a recurrence is a long product of
+Jacobians, and that product almost always shrinks toward zero or grows
+without bound, so gradient descent cannot easily attach a prediction to an
+input many steps back. That diagnosis is what motivated the gated cells the
+chapter points at but does not build. \textcite{hochreiter1997lstm}
+introduced the long short-term memory, whose additive cell state and learned
+gates create the gradient highway described in
+\Cref{sec:vanishing-gradients}; the gated recurrent unit of
+\textcite{cho2014gru} is a lighter variant in the same family. Both keep the
+recurrent prior and the \texttt{+=} accumulation pattern, and both replace
+the simple tanh update with a gated one to keep gradients alive over longer
+spans.
+
+For a textbook account of recurrent networks, backpropagation through time,
+and the gated architectures, see the sequence-modeling chapters of
+\textcite{goodfellow2016dlbook}.
