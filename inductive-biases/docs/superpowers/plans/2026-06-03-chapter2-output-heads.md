@@ -118,7 +118,7 @@ Ten tasks. Notebook is Task 2 (notebook-first). No exercises task.
 
 `notebooks/ch02-output-heads.ipynb`. Port from `examples/poisson_regression.py` and `examples/heteroscedastic.py` plus `scratchnn`.
 
-- Poisson cell: lambda(x) = max(0.1, 2 + 5 sin(pi x)) on [0, 2]; identical 1-16-1 Tanh bodies, MSE head vs Poisson head. Record minimum predicted rate on a grid (target ~0.068 MSE, ~0.310 Poisson) and comparative Poisson NLL. Save `book/figures/ch02-poisson.pdf` (true rate, MSE fit, Poisson fit).
+- Poisson cell: lambda(x) = max(0.1, 2 + 5 sin(pi x)) on [0, 2]; identical 1-16-1 Tanh bodies, MSE head vs Poisson head. Record minimum predicted rate on a grid (target ~0.068 MSE, ~0.310 Poisson) and comparative Poisson NLL. (Erratum 2026-06-03: the executed run produced 0.152 / 0.139, both positive; the chapter uses these regenerated values.) Save `book/figures/ch02-poisson.pdf` (true rate, MSE fit, Poisson fit).
 - Heteroscedastic cell: y = sin(x) + noise, sigma(x) = |x|/3 + 0.1 on [0, 6]; 1-16-1 (MSE) vs 1-16-2 (Gaussian NLL). Record the six-row prediction table and test Gaussian NLL (target 0.745 MSE+global-sigma vs 0.509 het). Save `book/figures/ch02-heteroscedastic.pdf` (predictions with a +/- sigma band vs MSE point predictions).
 - gradient_check cells for `MSELoss`, `PoissonNLLLoss`, `GaussianNLLLoss` (anchor on a Tanh MLP; residuals near 1e-10/1e-11).
 - Fix and record seeds. Execute end to end. A Results markdown cell captures the exact numbers for the prose.

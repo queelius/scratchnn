@@ -1,5 +1,5 @@
 % DEFINED:   sec:canonical-link, thm:canonical-link, eq:expfam-grad, sec:three-pairings
-% RESOLVED:  sec:logistic, sec:softmax, ch:foundations
+% RESOLVED:  sec:logistic, sec:softmax, ch:foundations, eq:residual
 % FORWARD:   sec:poisson (below in ch02)
 
 \section{The canonical-link theorem}\label{sec:canonical-link}
@@ -69,7 +69,10 @@ observed; the form of the response variable does not enter.
 
 \Cref{ch:foundations}'s pattern is one instance. MSE (identity plus
 Gaussian) is another: $\partial L / \partial z = z - y$, which is
-$\hat{p} - y$ with $\hat{p} = z$. The Poisson pairing in
+$\hat{p} - y$ with $\hat{p} = z$. This is the same residual
+\Cref{ch:foundations} wrote as $\hat{y} - y$ in \Cref{eq:residual}: the
+prediction $\hat{y}$ there is the Gaussian mean, which is exactly the
+expected sufficient statistic $\hat{p}$ here. The Poisson pairing in
 \Cref{sec:poisson} will be a third.
 
 \section{Chapter 1's three pairings, named}\label{sec:three-pairings}
