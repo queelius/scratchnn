@@ -1,7 +1,31 @@
 % DEFINED:   (no new labels)
-% RESOLVED:  cite keys: bengio2003nplm, hutter2005uai
+% RESOLVED:  cite keys: bengio2003nplm, shannon1951, hutter2005uai,
+%            goodfellow2016dlbook
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
 
-Placeholder.
+The fixed-context neural language model is due to \textcite{bengio2003nplm},
+\emph{A Neural Probabilistic Language Model}, which introduced the
+embed-concatenate-and-feed-an-MLP design and the idea of learning
+distributed word representations jointly with the predictor. It was the
+dominant neural language model for several years, until recurrent networks
+and then Transformers displaced it; the next two chapters follow that
+displacement.
+
+The compression reading of this chapter rests on a long lineage.
+\textcite{shannon1951}, \emph{Prediction and Entropy of Printed English},
+established that the per-symbol entropy of a language is its incompressible
+core and estimated it for English from human prediction experiments,
+fixing the bits-per-character measure this chapter reports. The identity
+between predicting well and compressing well is made into a principle of
+inference by the minimum-description-length and algorithmic-probability
+tradition; \textcite{hutter2005uai} gives the modern treatment, in which
+the best predictor is the one that yields the shortest code for the data,
+and induction itself is recast as compression. That is the
+Solomonoff north star the chapter points at, and the Transformer chapter
+returns to the same bits-per-character yardstick.
+
+For a textbook account of neural language models and the embedding layer,
+including the word-level setting this chapter sets aside in favor of
+characters, see the relevant chapters of \textcite{goodfellow2016dlbook}.
