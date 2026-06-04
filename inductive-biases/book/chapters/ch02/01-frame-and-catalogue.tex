@@ -1,11 +1,62 @@
 % DEFINED:   sec:mle-frame, sec:catalogue, tab:head-catalogue
 % RESOLVED:  ch:foundations
-% FORWARD:   sec:canonical-link (defined below in ch02)
+% FORWARD:   sec:canonical-link (below in ch02), sec:poisson (below in ch02)
 
 \section{The unifying frame}\label{sec:mle-frame}
 
-Placeholder.
+Every supervised loss in \Cref{ch:foundations} had the same shape:
+
+\[
+  L(\theta) = -\frac{1}{N} \sum_{n=1}^{N} \log p_\theta(y_n \mid x_n).
+\]
+
+Minimizing the loss \emph{is} maximum likelihood under an assumed
+conditional distribution $p_\theta(y \mid x)$. The network parameterizes
+that distribution; gradient descent moves the parameters toward higher
+likelihood of the observed data.
+
+The output head is the bridge. The network produces a raw vector
+$z = f_\theta(x)$. A \textbf{link function} maps $z$ into the natural
+parameter (or the mean, or a probability vector) of the assumed
+distribution. The \textbf{loss} is the negative log-likelihood of $y$
+under that distribution. \Cref{ch:foundations}'s organizing principle,
+\emph{the network produces logits, the loss interprets them}, is exactly
+this: the link function and the assumed distribution together \emph{are}
+the interpretation.
+
+That is the whole story. The rest of this chapter is the unpacking.
 
 \section{The catalogue}\label{sec:catalogue}
 
-Placeholder.
+Five canonical pairings, each a member of the exponential family with its
+\textbf{canonical link} (the link that makes the gradient come out
+cleanest, as \Cref{sec:canonical-link} will prove):
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+Output type         & Link              & Loss          & Assumed distribution      \\
+\midrule
+Real-valued         & identity          & MSE           & Gaussian (fixed variance) \\
+Binary              & logit (sigmoid)   & BCE           & Bernoulli                 \\
+Categorical         & softmax           & cross-entropy & Categorical               \\
+Count               & log               & Poisson NLL   & Poisson                   \\
+Positive continuous & reciprocal        & Gamma NLL     & Gamma                     \\
+\bottomrule
+\end{tabular}
+\caption{Five canonical head pairings. Each row is a different prior about
+  what kind of object $y$ is. The first three are what \Cref{ch:foundations}
+  already built; the rest of this chapter extends the table.}
+\label{tab:head-catalogue}
+\end{table}
+
+Each row is a different commitment about what kind of object $y$ is.
+Real-valued and unbounded? Gaussian. A 0 or 1? Bernoulli. One of $K$
+mutually exclusive classes? Categorical. A non-negative integer event
+count? Poisson.
+
+The link maps the network's unconstrained raw output $z \in \mathbb{R}$
+into a valid parameter for the distribution: a real mean for Gaussian, a
+probability in $[0, 1]$ for Bernoulli, a probability vector on the simplex
+for Categorical, a positive rate for Poisson.
