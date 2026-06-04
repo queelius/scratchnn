@@ -1,11 +1,105 @@
 % DEFINED:   sec:canonical-link, thm:canonical-link, eq:expfam-grad, sec:three-pairings
 % RESOLVED:  sec:logistic, sec:softmax, ch:foundations
-% FORWARD:   sec:poisson (defined below in ch02)
+% FORWARD:   sec:poisson (below in ch02)
 
 \section{The canonical-link theorem}\label{sec:canonical-link}
 
-Placeholder.
+\Cref{ch:foundations} observed that both BCE and softmax cross-entropy
+have gradient $\partial L / \partial z = \mathbf{p} - \mathbf{y}$ with
+respect to the logits: the section on logistic regression in
+\Cref{sec:logistic} derived $p - y$ for the binary case, and
+\Cref{sec:softmax} derived $\mathbf{p} - \mathbf{y}$ for the
+multiclass case. \Cref{ch:foundations} called that pattern no
+coincidence but did not prove the general statement. Here it is.
+
+Write an exponential family in natural form:
+\[
+  p(y \mid \eta) = h(y)\exp\bigl(\eta \cdot T(y) - A(\eta)\bigr),
+\]
+where $\eta$ is the \textbf{natural parameter}, $T(y)$ is the
+\textbf{sufficient statistic}, and
+$A(\eta) = \log \int h(y) \exp(\eta \cdot T(y))\,dy$
+is the \textbf{log-partition function}.
+For Bernoulli, $\eta = \log(p/(1 - p))$ is the logit; for Categorical,
+$\eta_i = \log p_i$ up to a shared shift; for Gaussian (fixed variance),
+$\eta = \mu/\sigma^2$; for Poisson, $\eta = \log \lambda$.
+
+A foundational identity in exponential families: differentiating the
+normalization condition $\int p(y \mid \eta)\,dy = 1$ with respect to
+$\eta$ yields
+\[
+  A'(\eta) = \mathbb{E}\bigl[T(y)\bigr].
+\]
+The derivative of the log-partition function equals the expected sufficient
+statistic. Call this $\hat{p}$, the model's prediction in the relevant
+sense: for Bernoulli, $\hat{p}$ is the success probability; for
+Categorical, the probability vector; for Gaussian, the mean; for Poisson,
+the rate.
+
+Now suppose the network's output $z$ \emph{is} the natural parameter,
+$\eta = z$. This is the \textbf{canonical link} choice. The negative
+log-likelihood is
+\[
+  -\log p(y \mid z) = -\log h(y) - z \cdot T(y) + A(z),
+\]
+and its gradient with respect to $z$ is
+\begin{equation}\label{eq:expfam-grad}
+  \frac{\partial}{\partial z}\bigl[-\log p(y \mid z)\bigr]
+    = -T(y) + A'(z) = \hat{p} - y,
+\end{equation}
+reading $y$ as $T(y)$ (the sufficient statistic; for Categorical, the
+one-hot of $y$).
+
+\begin{theorem}\label{thm:canonical-link}
+For any exponential-family distribution with its canonical link, the
+gradient of the NLL with respect to the network output is the expected
+sufficient statistic minus the observed.
+\end{theorem}
+
+\begin{proof}
+Differentiate $-\log p(y \mid z)$ directly:
+$\partial / \partial z \bigl[{-z \cdot T(y) + A(z)}\bigr] = -T(y) + A'(z)$.
+By the exponential-family identity, $A'(z) = \hat{p}$. Reading
+$T(y) = y$ gives $\hat{p} - y$.
+\end{proof}
+
+\noindent The residual form is not an algebraic accident. The gradient is
+geometrically the gap between the model's expected value and what was
+observed; the form of the response variable does not enter.
+
+\Cref{ch:foundations}'s pattern is one instance. MSE (identity plus
+Gaussian) is another: $\partial L / \partial z = z - y$, which is
+$\hat{p} - y$ with $\hat{p} = z$. The Poisson pairing in
+\Cref{sec:poisson} will be a third.
 
 \section{Chapter 1's three pairings, named}\label{sec:three-pairings}
 
-Placeholder.
+Brief recaps; the derivations are in \Cref{ch:foundations}.
+
+\textbf{Identity plus Gaussian plus MSE.} Assumed distribution:
+$y \mid x \sim \mathcal{N}(\mu(x), \sigma^2)$ with $\sigma^2$ fixed
+and absorbed into the constant. Link: identity (the network output $z$
+is $\mu$ directly). NLL (dropping constants): $\tfrac{1}{2}(y - z)^2$,
+mean squared error. Gradient: $z - y$. Inductive bias: errors are
+symmetric, additive, and Gaussian. If the true distribution is
+heavy-tailed or skewed, MSE pays for that with biased estimates.
+
+\textbf{Logit plus Bernoulli plus BCE.} Assumed distribution:
+$y \mid x \sim \mathrm{Bernoulli}(p(x))$, $y \in \{0, 1\}$. Link:
+logit, $\eta = \log(p/(1-p)) = z$; the inverse is sigmoid,
+$p = \sigma(z)$. NLL: $-y \log p - (1-y)\log(1-p)$, computed stably
+from $z$. Gradient: $p - y$. Inductive bias: the response is binary; a
+probabilistic prediction is well calibrated when training converges.
+
+\textbf{Softmax plus Categorical plus cross-entropy.} Assumed
+distribution: $y \mid x \sim \mathrm{Cat}(\mathbf{p}(x))$,
+$y \in \{0, \ldots, K-1\}$. Link: softmax,
+$\mathbf{p} = \mathrm{softmax}(\mathbf{z})$. NLL:
+$-\log p_y = \mathrm{logsumexp}(\mathbf{z}) - z_y$ in the stable form.
+Gradient: $p_i - \mathbf{1}[i = y]$, i.e.~$\mathbf{p} - \mathbf{y}$
+with $\mathbf{y}$ the one-hot. Inductive bias: the classes are mutually
+exclusive and exhaustive; the model cannot represent two classes at once.
+
+Three different objects ($y \in \mathbb{R}$, $y \in \{0,1\}$,
+$y \in \{0,\ldots,K-1\}$), three different distributions, three
+different links. One pattern: $\hat{p} - y$.
