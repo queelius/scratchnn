@@ -1,0 +1,48 @@
+% DEFINED:   ch:output-heads
+% CONTAINS:  labels live in \input'd files:
+%            sec:mle-frame, sec:catalogue, tab:head-catalogue,
+%            sec:canonical-link, thm:canonical-link, eq:expfam-grad,
+%            sec:three-pairings, sec:poisson, fig:ch02-poisson,
+%            sec:heteroscedastic, fig:ch02-heteroscedastic,
+%            sec:link-likelihood, sec:mdn,
+%            sec:parallel-axes, sec:library-additions, sec:handoff
+% RESOLVED:  ch:foundations, sec:logistic, sec:softmax,
+%            sec:inductive-biases, sec:autograd-note
+% FORWARD (prose-only, no \Cref): Chapter 3 (CNN), Part II architecture,
+%            Chapter 8 (RL)
+
+\chapter[Output Heads]{Output Heads as Inductive Bias}%
+\label{ch:output-heads}
+
+\Cref{ch:foundations} closed by naming two distinct axes at which the
+prior enters a supervised model: the \textbf{architecture} (how the
+network computes features) and the \textbf{output head} (what the raw
+output \emph{means}). This chapter takes up the output-head axis, and
+the central claim is one sentence:
+
+\begin{quote}
+\textbf{Every supervised neural network is a maximum-likelihood
+estimator under an assumed output distribution. The link function and
+the matching loss together specify that distribution, and the choice of
+distribution is itself an inductive bias about the data-generating
+process.}
+\end{quote}
+
+\Cref{ch:foundations} quietly committed to three such distributions
+(Gaussian, Bernoulli, Categorical) without naming them as choices. This
+chapter names them, then extends the catalogue to counts (Poisson), to
+outputs with heteroscedastic noise (Gaussian with predicted variance),
+and to continuous proportions (sigmoid for bounded targets). Each is a
+different bet about what kind of object $y$ is.
+
+The architecture axis, the second axis \Cref{ch:foundations}
+introduced, continues in the chapter on convolutional networks and
+through the rest of Part~II.
+
+\input{chapters/ch02/01-frame-and-catalogue}
+\input{chapters/ch02/02-canonical-link}
+\input{chapters/ch02/03-poisson}
+\input{chapters/ch02/04-heteroscedastic}
+\input{chapters/ch02/05-link-likelihood-mdn}
+\input{chapters/ch02/06-synthesis-library-handoff}
+\input{chapters/ch02/bib-notes}
