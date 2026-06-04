@@ -3,10 +3,109 @@
 % FORWARD:   sec:conv-forward (Task 4)
 
 \section{One unit, reused everywhere}\label{sec:conv-unit}
-% TODO Task 3
+
+The multilayer perceptron of \Cref{ch:foundations} classifies the $8 \times
+8$ UCI digits at about 96\% test accuracy. That looks reasonable until you
+ask what the model believes about its input. The MLP treats each of the 64
+pixels as an independent feature. Pixel $(3, 4)$ and pixel $(3, 5)$, which
+are neighbors in the image, are no more related to it than pixel $(3, 4)$
+and pixel $(7, 0)$, which are at opposite ends. The MLP has no concept of
+adjacency. It learns relationships between pixels from data, exactly as it
+would learn relationships between any other tabular features.
+
+A convolutional unit refuses to start from that blank slate. Recall that a
+\texttt{Linear} layer is one or more weight vectors $\mathbf{w}$ paired with
+biases $b$, computing a logit $z = \mathbf{w} \cdot \mathbf{x} + b$
+(\Cref{sec:mlp-backprop}). A convolutional unit is the same dot product,
+restricted to a small \textbf{kernel} of size $k \times k$ and applied at
+every position of a $2$-D input:
+\[
+  z_{r, c} = \sum_{i=0}^{k-1} \sum_{j=0}^{k-1}
+             W_{i, j}\, x_{r+i,\, c+j} + b.
+\]
+The kernel $W$ is shared across all output positions $(r, c)$. There is
+\emph{one} $W$, not one per position. That single restriction is the whole
+definition of a convolution. The small window is the \textbf{locality}
+prior: a unit looks at a neighborhood, never the entire input at once.
+
+Everything else is bookkeeping, and there is little of it:
+\begin{itemize}
+\item \textbf{Borders.} When the kernel runs off the edge of the input, we
+  either drop those positions (no padding, the choice this chapter uses) or
+  pad the input with zeros to preserve the spatial size.
+\item \textbf{Stride.} Sliding by one pixel between applications is the
+  default used here; a larger stride downsamples the output.
+\item \textbf{Channels.} A real image has several input channels (RGB has
+  three), and a layer has several output channels too, one per independent
+  kernel run in parallel. With $C_{\text{in}}$ input channels and
+  $C_{\text{out}}$ output channels, a kernel has shape $(C_{\text{in}}, k,
+  k)$, dotting through every input channel at each spatial position, and the
+  layer stacks $C_{\text{out}}$ such kernels.
+\end{itemize}
+
+For single-channel $8 \times 8$ digits with $k = 3$, no padding, stride one,
+and four output channels, the layer produces an output of shape $(4, 6, 6)$:
+four feature maps, each $6 \times 6$ because the kernel cannot fit at the
+last two positions in either dimension. The forward pass that computes it is
+shown in \Cref{sec:conv-forward}.
 
 \section{Weight sharing is the translation prior}\label{sec:weight-sharing}
-% TODO Task 3
+
+Reusing $W$ at every position is what makes the layer \textbf{translation
+equivariant}. Stated cleanly: if $x'$ is $x$ shifted by $(\Delta r, \Delta
+c)$, then the layer's output on $x'$ is its output on $x$ shifted by the same
+$(\Delta r, \Delta c)$, modulo whatever falls off the borders. A detector
+that fires on a stroke in one corner fires on the same stroke anywhere.
+
+This is not a property the network \emph{learns}. It is a property of the
+\emph{operator}: true at initialization, true after training, true for every
+kernel. The reason is the sharing itself. Shift the input by one pixel and
+every windowed dot product is now computed at a position also shifted by one,
+so the output simply slides. The MLP has no such guarantee. Each of its
+output units carries its own weight vector tied to specific coordinates of
+the input, so translating the input scrambles which weights see which pixels.
+
+Weight sharing and translation equivariance are therefore the same fact, read
+once from the parameter side and once from the function-symmetry side. The
+architecture commits to a symmetry of the data by reusing parameters across
+the positions that symmetry relates.
 
 \section{The parameter count tells the story}\label{sec:conv-params}
-% TODO Task 3
+
+The compactness of weight sharing shows up immediately in the parameter
+count, and the count is the cleanest single statement of the prior.
+
+The MLP for the $8 \times 8$ digits has shape $64 \to 32 \to 10$
+(\Cref{sec:mlp-backprop}). Its parameter count is
+\[
+  64 \cdot 32 + 32 + 32 \cdot 10 + 10 = 2410.
+\]
+A small convolutional network for the same task uses one conv layer of four
+$3 \times 3$ kernels followed by a fully connected head:
+\begin{lstlisting}
+Conv2D(in_channels=1, out_channels=4, kernel_size=3)
+ReLU()
+Linear(144, 10)
+\end{lstlisting}
+The conv layer has $4 \cdot (1 \cdot 9) + 4 = 40$ parameters. With no padding
+and stride one its output is $4 \times 6 \times 6 = 144$ units, so the head is
+\texttt{Linear(144, 10)} with $144 \cdot 10 + 10 = 1450$ parameters. The total
+is $40 + 1450 = 1490$, about 38\% smaller than the MLP. Almost all of the
+model's spatial capacity sits in the 40 parameters of the conv kernel; the
+head is a thin reader on top of the feature maps.
+
+The comparison is sharper if we ask what it would cost to replace the conv
+layer with a \texttt{Linear} layer producing the same 144-dimensional output.
+That layer is \texttt{Linear(64, 144)}, with $64 \cdot 144 + 144 = 9360$
+parameters. The convolution accomplishes the same input-to-output shape
+transformation with 40 parameters instead of 9360:
+\begin{equation}\label{eq:conv-params}
+  \frac{9360}{40} = 234.
+\end{equation}
+That factor of 234 is the explicit price of \emph{not} committing to locality
+and translation equivariance. The forward cost is modest in proportion: four
+output channels, one input channel, a $3 \times 3$ kernel, over $6 \times 6$
+output positions is $4 \cdot 1 \cdot 9 \cdot 36 = 1296$ multiply-adds per
+example. The prior buys a $234\times$ reduction in parameters at the cost of a
+fixed, transparent amount of arithmetic. Both numbers are regenerated by the
+chapter's paired notebook.
