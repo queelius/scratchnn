@@ -1,15 +1,115 @@
 % DEFINED:   sec:window-limits, sec:bengio-map, sec:bengio-handoff
 % RESOLVED:  ch:cnn (backward into Part II)
-% FORWARD (prose-only): Chapter 5 (the recurrent network), Chapter 6 (the Transformer)
+% FORWARD (prose-only): Chapter 5 (the recurrent network, "the next
+%            chapter"), Chapter 6 (the Transformer). Per Part II decision A,
+%            the full Bengio-vs-recurrent comparison is DEFERRED to Chapter 5;
+%            this section gives only a forward preview. No \Cref to Ch5/Ch6.
 
 \section{What the bounded window gives up}\label{sec:window-limits}
 
-Placeholder.
+The prior that makes this model simple is also its ceiling. Conditioning
+on exactly the last $N$ tokens means the model cannot use anything older,
+ever. If predicting the token at position $t$ depends on a token at
+position $t - 100$, an eight-character window has already forgotten it. For
+char-level Alice this rarely bites, because character prediction leans
+heavily on local structure: morphology, word boundaries, common bigrams
+and trigrams all live well inside eight characters. But the limit is real
+and it is structural, not a matter of more training. There are two natural
+ways to loosen it, and they point at the next two chapters.
+
+\textbf{A recurrent state.} Instead of a fixed window, carry a hidden
+state forward and update it one token at a time. The state is a summary of
+the entire past, not a slice of it, so in principle nothing is forgotten by
+construction. That is the recurrent network, the subject of the next
+chapter. It trades the fixed window for an unbounded-in-principle memory,
+and it pays for the trade in ways the fixed-context model does not:
+training must run sequentially through time, and the gradient has to travel
+back through a long product of Jacobians that tends to shrink it toward
+zero. The next chapter builds the recurrent cell on the same corpus and the
+same vocabulary used here, precisely so the two priors can be set against
+each other directly; the head-to-head comparison of the bounded window and
+the recurrent state belongs there, where both models are on the table.
+
+\textbf{A convolution in time.} A $1$-D convolution with kernel size $N$
+takes the other fork on the position axis. Where this model gives each
+position its own slice of the head's first weight matrix, a convolution
+shares one learned context detector across all positions and slides it
+along the sequence, exactly the weight sharing the spatial convolution of
+\Cref{ch:cnn} used, transposed from space to time. The trade is parameter
+efficiency against position specificity. The convolution has fewer
+parameters, one kernel applied many times, and it is the natural choice
+when the same pattern can appear at any offset, as in motif detection or
+edge detection in a $1$-D signal. Bengio's concatenation has more
+parameters, one set per position-times-hidden-unit pair, but it can learn
+that the immediately preceding token matters more than the one $N-1$ back,
+or that agreement runs between two particular slots. For language, where
+position carries real information and the nearest token is usually the most
+informative, paying for position specificity is a reasonable bet.
+
+The three options form one progression along a single question: how much
+of the past does the architecture let a prediction reach, and how is that
+reach paid for? The fixed window reaches exactly $N$ tokens, cheaply and in
+parallel. The convolution reaches a fixed receptive field while sharing
+weights across offsets. The recurrent state reaches arbitrarily far in
+principle, at the cost of sequential training and a fragile gradient. Each
+chapter in this part takes one more step along that line.
 
 \section{Where this sits in the inductive-bias map}\label{sec:bengio-map}
 
-Placeholder.
+Two axes organize the architectural priors for sequences: how the model
+handles position, and how far back its memory reaches. The fixed-context
+model occupies a specific corner of that grid, and naming the neighbors
+makes the corner legible.
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Architecture & Position handling & Memory horizon \\
+\midrule
+MLP & no sharing; flat input & full input dimension \\
+$1$-D CNN & weight sharing across positions & fixed receptive field \\
+\textbf{Fixed-context LM} & shared embedding, position-sensitive MLP
+  & \textbf{fixed window $N$} \\
+Recurrent network & weight sharing across time; state carries
+  & unbounded in principle \\
+Transformer & permutation-equivariant plus positional code
+  & full sequence \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The bottom two rows are forward references: the recurrent network is the
+next chapter, and the Transformer is the chapter after it. Read top to
+bottom, the table is the same loosening of the memory constraint the
+previous section described. The fixed-context model sits between the $1$-D
+convolution and the recurrent network: position-sensitive at the head
+level, where the convolution is not, and capped at a hard memory cutoff of
+$N$ tokens, where the recurrent network is not. It has no direct
+interaction between positions beyond what the head learns, which is where
+the Transformer, with its explicit pairwise attention, will go further
+still.
+
+It is the architecture for problems where the relevant context is small
+\emph{and you know how small}. When that assumption holds, it is fast,
+simple, and easy to train, with none of the sequential-training or
+gradient-stability costs the unbounded-memory architectures carry. When
+the assumption fails, when the prediction genuinely needs a token from far
+outside the window, no amount of training inside the window can recover it,
+and the unbounded-context architectures become necessary.
 
 \section{The Transformer is next}\label{sec:bengio-handoff}
 
-Placeholder.
+The fixed-context model already shows the appeal of dropping recurrence:
+no sequential dependency between examples, no gradient threaded back
+through time, just an MLP over a window. Its limit is equally clear: the
+window is a hard wall, and inside it the positional structure is hardwired
+by concatenation order rather than learned. The next two chapters take the
+two ways forward. The recurrent network keeps a running state so the reach
+is no longer bounded by a fixed $N$. The Transformer keeps the
+fixed-context model's no-recurrence design but replaces the hardwired,
+position-by-position head with attention, letting every position read every
+other with weights learned from the data, and then adds a positional
+encoding back in to recover the order that pure attention throws away. That
+is the destination this part is walking toward: from a window, to a state,
+to a learned content-addressable lookup over the whole sequence. The
+recurrent network comes first.
