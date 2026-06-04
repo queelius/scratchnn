@@ -5,7 +5,101 @@
 %            Not drafted yet; stays prose.
 
 \section{Inductive bias, three axes}\label{sec:three-axes}
-Placeholder.
+
+Across the book we have walked the two axes of supervised inductive bias
+named in \Cref{sec:inductive-biases}:
+
+\begin{itemize}
+\item \textbf{Architecture} (this chapter and the previous two,
+  \Cref{ch:cnn} and \Cref{ch:rnn}): the structural prior the network
+  commits to about \emph{how features compose}. The CNN commits to
+  locality and translation equivariance; the RNN to time-translation
+  equivariance and a bottleneck state; the transformer to a
+  content-addressable lookup, repeated and composed through depth.
+\item \textbf{Output head} (\Cref{sec:parallel-axes}): the prior the
+  interpretation commits to about \emph{the distribution of the response}.
+\end{itemize}
+
+The pointer experiment forces a third dimension into the open:
+
+\begin{itemize}
+\item \textbf{Implementation realization}: even when the right inductive
+  bias is structurally present in the architecture, the choice of
+  initialization, positional encoding, supervision shape, and optimizer
+  can keep it from materializing during training. At production scale,
+  with the standard defaults, this dimension is mostly invisible. At
+  small experimental scale it becomes the dominant factor, and it is
+  where most of the debugging cycles in real transformer engineering go.
+\end{itemize}
+
+Every successful supervised network in modern practice is a triple: a
+body that bakes in the right architectural prior for the data, a head
+that bakes in the right likelihood prior for the response, and a training
+recipe co-evolved with the body and head so the priors can actually be
+discovered by gradient descent. The combinations multiply.
+
+The transformer is the most flexible body in the book. It bakes in less
+structure than a CNN or an RNN: it does not commit to spatial locality,
+to temporal recurrence, or to a fixed context window. It commits instead
+to a \emph{mechanism}, content-addressable retrieval, and lets the data
+dictate which positions are retrieved when. The cost of that flexibility
+is the $T \times T$ attention matrix, quadratic in the sequence length in
+both compute and memory. The benefit is that one architecture serves any
+task whose structure is ``attend to the right earlier position.''
+Language modeling is the canonical case (the right position depends on
+the syntax, the topic, the entity in play), and the same prior fits code
+completion, reasoning over context, and retrieval-augmented generation.
+
+The cost is \emph{also} the realization burden. The flexibility is
+genuinely accessible only with a co-evolved recipe, and much of modern
+transformer practice (warmup, learned or rotary positional encodings,
+careful initialization, layer-norm placement, layer-wise learning-rate
+decay, mixed precision, gradient clipping) is the accumulated body of
+tricks that keeps the inductive bias usable. \Cref{sec:pe-scale-fix}
+rediscovered one slice of that recipe by debugging.
+
+The next chapter takes the model just trained and reverse-engineers its
+circuit, asking whether the architectural argument of
+\Cref{sec:one-layer-limit} is empirically vindicated and how the circuit
+relates to induction heads and in-context learning. The model is small
+enough to interpret fully, and the answer clarifies what the
+content-addressable-lookup primitive actually is.
+
+The closing chapter introduces reinforcement learning, the third
+learning paradigm beyond supervised. The heads-as-bias frame still holds
+there (a policy head is a softmax over actions; a value head is identity
+plus mean squared error on returns), but the training signal stops being
+a per-example label and becomes a scalar reward over trajectories. The
+inductive-bias frame extends naturally: reward shaping, policy
+architecture, and exploration strategy are all priors. The theoretical
+optimum, AIXI, is Solomonoff induction (the compression-as-prediction
+north star of \Cref{ch:fixed-context-lm}) joined to Bayesian decision
+theory and reward maximization.
 
 \section*{Appendix: a richer DGP that did not pan out}\label{sec:richer-dgp}
-Placeholder.
+
+The first design for this chapter used a recursive bit-stream generator
+with prefix-coded instructions (\texttt{examples/bit\_dgp.py}): a
+continuous bit stream in which each instruction was either a literal bit
+(prefix code \texttt{0} for value 0, \texttt{10} for value 1) or a
+dereference (\texttt{11} followed by an Elias-gamma-encoded offset and the
+dereference's own value codeword), with the offset counted in instruction
+units. Multi-hop chains arose naturally whenever a dereference's target
+was itself a dereference.
+
+The generator is rich and pedagogically appealing: the model must learn
+the prefix code, parse the stream into instructions, count instructions
+for the gamma-encoded address, and perform the lookup, all from raw bits.
+Small transformers (model width 64 to 128, one or two layers) did not
+learn it within our training budget; even at 5000 iterations they barely
+beat the marginal-prediction baseline. Parsing, counting, and addressing
+in one small model appears to need more capacity or far longer training
+than we had. The positional-encoding-scale problem of
+\Cref{sec:pe-scale-fix} likely contributed, and we did not retry the
+recursive generator with a learned encoding.
+
+We kept the generator as reference because the design is interesting in
+its own right: it is the smallest recursive task we know that exercises
+stacked attention end to end with no task-specific scaffolding. Showing
+that a sufficiently large or sufficiently well-tuned transformer can
+learn it is left open.

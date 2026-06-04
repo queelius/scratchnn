@@ -3,10 +3,125 @@
 % FORWARD:   (none)
 
 \section{Attention as a lookup}\label{sec:attention-lookup}
-Placeholder.
+
+Scaled dot-product attention is the one operation the whole chapter turns on.
+For a query matrix $Q$, a key matrix $K$, and a value matrix $V$, it computes
+\[
+  \mathrm{Attention}(Q, K, V)
+  = \mathrm{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}}\right) V .
+\]
+Three steps run in sequence. Take the pairwise dot products between every
+query and every key. Turn each query's row of scores into a distribution over
+positions with a softmax. Return, for each query, the average of the values
+weighted by that distribution. Read operationally, that is exactly what a
+content-addressable memory does.
+
+\begin{itemize}
+\item The query at a position encodes what that position is looking for.
+\item The key at each past position encodes what is stored there to be
+matched against.
+\item The value at each past position encodes what would be returned if that
+position is the one selected.
+\item The softmax picks, softly, the past position whose key best matches the
+query, and the output is that position's value.
+\end{itemize}
+
+When the query is the encoding of an address, ``return position $k$,'' and the
+keys encode positions, the softmax sharpens to a near one-hot spike on the
+addressed position, and its value is read out. That is a pointer dereference,
+done with differentiable parts so it can be learned by gradient descent.
+
+This is where the book's pure-Python through-line ends. The operators below
+are hand-derived NumPy from \texttt{examples/transformer.py}, vectorized
+because pure-Python loops over the $T \times T$ score matrix are not
+tractable, but the derivation is the same one \Cref{ch:foundations} carried
+for the multilayer perceptron. Here is the core of the forward pass, lifted
+from the multi-head attention class and shown for a single head: project the
+input into queries, keys, and values, score, mask out the future so a
+position can only read the past, softmax, and read out the weighted values.
+
+\begin{lstlisting}
+# Q, K, V: (T, d_k) projections of the input x.
+scale  = 1.0 / math.sqrt(d_k)
+scores = (Q @ K.T) * scale                          # (T, T) match scores
+mask   = np.tril(np.ones((T, T)))                   # lower triangular
+scores = np.where(mask > 0, scores, -1e9)           # forbid attending ahead
+attn   = softmax(scores, axis=-1)                   # (T, T) distribution
+out    = attn @ V                                   # (T, d_k) read-out values
+\end{lstlisting}
+
+The masking step is what makes this a causal read: position $t$ may match
+against positions $0$ through $t$ and no further, so the lookup at the final
+position can reach every earlier position but not the answer it is trying to
+predict. Whether attention \emph{succeeds} at a given lookup depends on
+whether the address it needs is actually present in the query, and that is
+where depth enters.
 
 \section{A pointer-dereferencing task}\label{sec:pointer-task}
-Placeholder.
+
+To test the claim we need a task whose structure \emph{requires} a
+content-addressable read, with no shortcut a fixed pattern could exploit. The
+task is deliberately small so the structure stays visible. Each example is a
+12-bit sequence with three fields:
+\[
+  \underbrace{m_0\, m_1\, \cdots\, m_7}_{\text{8 memory bits}}\;
+  \underbrace{a_0\, a_1\, a_2}_{\text{3 address bits}}\;
+  \underbrace{y}_{\text{target}} .
+\]
+The eight memory bits are random. The three address bits are the binary
+encoding of an index $a \in \{0, 1, \ldots, 7\}$, most significant bit first.
+The target is $y = m_a$, the memory bit at the addressed position. There are
+$2^{11} = 2048$ possible inputs. We draw 20{,}000 training examples with
+replacement, so duplicates abound, and 2000 held-out examples for evaluation.
+The model reads the first eleven bits and predicts the twelfth. The generator
+is \texttt{make\_variant1} in \texttt{examples/simple\_pointer\_dgp.py}:
+
+\begin{lstlisting}
+def make_variant1(num_examples, M=8, A=3, seed=0):
+    """[M memory bits] [A address bits] [1 target = memory[addr]]."""
+    rng = np.random.default_rng(seed)
+    memory = rng.integers(0, 2, size=(num_examples, M))
+    address_int = rng.integers(0, M, size=num_examples)
+    # Encode the address as A binary bits, most significant first.
+    address_bits = np.zeros((num_examples, A), dtype=np.int64)
+    for j in range(A):
+        address_bits[:, j] = (address_int >> (A - 1 - j)) & 1
+    target = memory[np.arange(num_examples), address_int][:, None]
+    sequences = np.concatenate([memory, address_bits, target], axis=1)
+    return sequences, target.squeeze(-1)
+\end{lstlisting}
+
+This is the smallest task that requires content-addressable memory. To get
+the answer the model has to learn three steps: recognize that the bits at
+positions 8, 9, 10 are an address, decode those three bits to an integer $a$,
+and use $a$ to read memory position $m_a$. The third step is the dereference,
+and it is dynamic: \emph{which} memory position must be read depends on the
+\emph{content} of the address bits, which are only known at inference time. No
+fixed wiring can stand in for it, which is exactly what makes the task a clean
+probe of the prior.
 
 \section{Why one attention layer is not enough}\label{sec:one-layer-limit}
-Placeholder.
+
+A subtle but load-bearing point: a one-layer, one-head transformer
+\emph{cannot} solve this task, and the reason is structural rather than a
+matter of capacity.
+
+The prediction is made at the last input position, position 10, using the
+output of attention there. The query at position 10, before attention, is
+computed from the input at position 10 alone: the single address bit $a_2$,
+plus a positional encoding. It does not see $a_0$ or $a_1$, which sit at
+positions 8 and 9. The attention layer then forms a weighted sum of past
+values with weights set by $\mathrm{softmax}(Q_{10} \cdot K_i)$. Since
+$Q_{10}$ is fixed once the input at position 10 is fixed, those weights are
+not a function of the full address. The layer can learn a fixed attention
+pattern, always read memory position 3, say, but it cannot route to a
+position whose identity depends on bits it never sees.
+
+Two layers can. The first layer lets the hidden state at position 10 pull in
+the address bits from positions 8 and 9 through attention. The second layer's
+query at position 10 is then computed from a hidden state that contains all
+three address bits, so it can route dynamically to the addressed memory cell.
+This is the precise sense in which transformer depth equals the number of
+composed lookups: each additional layer adds one more stage of dynamic
+routing on top of the information the previous layers have already gathered.
+The next section puts the argument to an experiment.

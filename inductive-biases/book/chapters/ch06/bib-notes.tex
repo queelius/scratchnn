@@ -4,4 +4,27 @@
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
-Placeholder.
+
+The transformer and scaled dot-product attention are from
+\textcite{vaswani2017attention}. That paper also multiplies the embedding
+by $\sqrt{d_{\text{model}}}$ before adding the positional encoding, the
+detail whose absence drove the scale mismatch diagnosed in
+\Cref{sec:pe-scale-fix}.
+
+The plateau-then-sudden-transition pattern of \Cref{sec:exp-single-lookup}
+is the phenomenon \textcite{power2022grokking} named grokking:
+generalization arriving long after the training loss has settled, on
+small algorithmic tasks like the one used here.
+
+The reverse-engineering the next chapter performs follows the
+transformer-circuits line of work. \textcite{elhage2021framework} sets out
+the framework for reading attention-only transformers as compositions of
+circuits, and \textcite{olsson2022induction} identifies induction heads
+and ties them to in-context learning. The pointer-dereference primitive
+studied in this chapter is a deliberately minimal cousin of those
+mechanisms.
+
+The compression-as-prediction thread that surfaces in the closing
+synthesis (\Cref{sec:three-axes}) and in \Cref{ch:fixed-context-lm} runs
+through Solomonoff induction and its decision-theoretic extension AIXI;
+\textcite{hutter2005uai} is the book-length treatment.

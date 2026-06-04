@@ -3,7 +3,157 @@
 % FORWARD:   (none)
 
 \section{The fix: positional-encoding scale}\label{sec:pe-scale-fix}
-Placeholder.
+
+The audit pinned down why the choice of positional encoding mattered so much.
+The \texttt{Embedding} layer initializes its weight matrix at scale $0.02$,
+the standard default tuned for large vocabularies. With a two-token bit
+vocabulary the input embeddings stay near that $0.02$ scale, while the
+sinusoidal positional encoding has entries of magnitude about $1$. So at the
+input, where embedding and position are added together, the content signal is
+roughly $35$ times smaller than the positional signal. The model has to learn
+to discount the positional swamping before it can route on content. At $M=8$
+that finishes in time. At $M \geq 16$ the optimization plateaus before the
+embeddings have been rescaled to anything competitive with the encoding.
+
+There are two clean fixes, and both target the same content-versus-position
+\emph{scale balance} at the network's input.
+
+\begin{enumerate}
+\item \textbf{Rescale the embedding} so content and position start at
+comparable magnitudes. The original transformer paper does exactly this: it
+multiplies the embedding output by $\sqrt{d_{\text{model}}}$ before adding the
+positional encoding. A crude $25\times$ rescaling of the embedding weights
+alone lifts $M=16$ from 0.67 to 0.79 with no other change, which was checked
+during the audit.
+\item \textbf{Use a learned positional encoding}, initialized at the same
+small $0.02$ scale as the embedding. Now content and position both start small
+and the model can grow them together as training proceeds. This is what takes
+the lookup task to 100 percent in the architecture sweep of
+\Cref{sec:four-hypotheses}.
+\end{enumerate}
+
+Modern transformer libraries use either learned or rotary position
+representations, both of which sidestep the fixed-magnitude
+sinusoidal-against-tiny-embedding problem. At production scale, with large
+vocabularies and well-tuned initialization and warmup, the issue mostly
+disappears; at this small experimental scale it dominates. The multi-head
+result fits the same story. With several heads, at least one can find a
+query-key geometry that compensates for the input-scale imbalance, redundancy
+a single head does not have, which is why four heads recover 98.3 percent
+where one head reaches only 0.747.
 
 \section{Verification: the bias is partially confirmed}\label{sec:partial-confirmation}
-Placeholder (will place tab:depth-transition).
+
+With the fix in hand we rerun the scaling experiment, changing only the
+positional encoding (sinusoidal versus learned, both at the same $0.02$ init
+scale) and holding everything else at the baseline: two layers, one head,
+$d_{\text{model}}=64$, 6000 iterations.
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+$M$ & Sinusoidal PE & Learned PE \\
+\midrule
+16 & 0.747 & \textbf{1.000} \\
+24 & 0.687 & 0.605 \\
+32 & 0.664 & 0.645 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At $M=16$ the fix is decisive: learned positional encoding solves the lookup
+task to 100 percent, exactly as the content-addressable-memory theory predicts
+once the input-scale obstacle is removed. At $M \geq 24$, though, the same fix
+does not carry. Both encodings stay near chance, so the scale mismatch that
+dominated at $M=16$ is one barrier among several, and another kicks in at
+larger $M$. That nuance, frustrating to hit but honest to report, sharpens
+this chapter's lesson rather than softening it. The architectural inductive
+bias is \textbf{necessary but not sufficient}. Whether a network realizes the
+bias depends on a co-evolved set of choices the theory glosses over:
+initialization, positional encoding, supervision shape, optimizer state,
+learning-rate schedule, width, depth, data volume, and training time.
+
+To see how far the standard production knobs close the gap, we ran a
+scaled-down production recipe (the file is
+\texttt{examples/pointer\_kitchen\_sink.py}): $d_{\text{model}}=128$ instead
+of 64, four heads instead of one, learned positional encoding at small init,
+learning-rate warmup over 500 iterations, and 8000 iterations, with the same
+two layers and the same 20{,}000 examples.
+
+\begin{center}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$M$ & Sinusoidal (baseline) & Learned PE alone & Kitchen-sink recipe \\
+\midrule
+16 & 0.747 & \textbf{1.000} & \textbf{1.000} \\
+24 & 0.687 & 0.605 & \textbf{0.9975} \\
+32 & 0.664 & 0.645 & 0.680 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The $M=24$ row is the headline. The combined recipe lifts accuracy from
+0.605 to 0.9975, a near-complete solve at a scale that learned encoding alone
+could not touch. The bias was present in the architecture the whole time; the
+production defaults are what let it become a learned routine. At $M=32$ the
+recipe barely helps, reaching only 0.680, so we chased that case down. Three
+knobs were left: more iterations, more width, more depth. We tried each in
+isolation. To run a proper sweep without waiting hours per configuration, the
+same architecture was reimplemented in PyTorch.
+
+A caution that matters, and that the table below carries: the PyTorch model
+uses different initialization and different internals from the from-scratch
+NumPy code, so its absolute accuracies are \emph{not} comparable to the NumPy
+numbers above. The PyTorch results are read only against each other. With
+that wall in place, the result is clean. More iterations alone do not solve
+$M=32$: the NumPy kitchen-sink run to 30{,}000 iterations reached only 0.7625,
+and a PyTorch two-layer model run to 40{,}000 iterations sat at chance-plus
+with a loss curve flat from iteration 2000 on. More width alone does not
+solve it either: doubling to $d_{\text{model}}=256$ with eight heads, four
+times the parameters at two layers, stayed indistinguishable from chance-plus.
+Depth does. Holding width, head count, data, and seed fixed and varying only
+the layer count over a 40{,}000-iteration budget:
+
+\begin{table}[t]
+  \centering
+  \begin{tabular}{@{}rrrrl@{}}
+  \toprule
+  Layers & Parameters & Loss at 40k & Test accuracy & Loss curve \\
+  \midrule
+  2 & 270k & 0.6463 & 0.6160 & flat, never transitions \\
+  3 & 403k & 0.1154 & \textbf{0.9460} & transitions at iter ${\sim}7000$ \\
+  \bottomrule
+  \end{tabular}
+  \caption{The $M=32$ depth transition, run in PyTorch with only the layer
+  count varying (the controlled comparison from
+  \texttt{examples/RESULTS.md}). The two-layer model is flat for the whole
+  budget; the three-layer model phase-transitions near iteration 7000 and is
+  still descending when stopped. The PyTorch model's initialization and
+  internals differ from the NumPy model used elsewhere in this chapter, so
+  these numbers are read only against each other, not against the NumPy
+  tables.}
+  \label{tab:depth-transition}
+\end{table}
+
+\Cref{tab:depth-transition} is decisive within its frame: at $M=32$, depth is
+the binding knob, and neither width nor training time substitutes for it. It
+is tempting to package this as a tidy law, that depth equals the number of
+address bits the model must compose, so larger $M$ needs more layers. Resist
+it, because the data refute the clean version. $M=24$ and $M=32$ have the same
+address width, since $\lceil \log_2 24 \rceil = \lceil \log_2 32 \rceil = 5$,
+yet two layers solved $M=24$ to 0.9975 and cannot solve $M=32$ at all. The
+address-decode work is identical across the two. What differs is the
+\textbf{lookup fan-out}, the number of memory cells the second-stage query
+must discriminate among, 24 versus 32, together with the fact that $M=32$
+fills the entire five-bit address space while $M=24$ uses only 24 of the 32
+codes. The bottleneck at $M=32$ is the precision of the one-of-$M$ selection,
+not the depth of the address decode. The honest claim is the controlled-
+experiment one, that at $M=32$ depth solves where width and time do not, and
+not a closed-form depth law.
+
+This is the scaling-law picture in miniature. Capacity, depth, data, and
+iterations co-scale, and the binding constraint moves as the task hardens. At
+$M=8$ the binding constraint was nothing; any two-layer model solves it. At
+$M=16$ it was positional-encoding scale. At $M=24$ it was the combined
+production recipe. At $M=32$ it is depth. Each regime hides a different
+bottleneck, and finding it is the whole game.

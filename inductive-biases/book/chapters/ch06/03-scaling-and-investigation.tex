@@ -3,7 +3,134 @@
 % FORWARD:   (none)
 
 \section{Scaling beyond \texorpdfstring{$M=8$}{M=8}, the puzzle}\label{sec:scaling-puzzle}
-Placeholder (will place fig:ch06-scaling).
+
+So far the story holds together. One layer fails by the structural argument,
+two layers succeed in a clean grokking shape, and an extra hop benefits from
+an extra layer. The content-addressable-memory prior seems to be doing exactly
+what the theory predicts, so the obvious next experiment is to scale the
+memory size $M$ up and watch the transformer pull ahead of the MLP cleanly.
+The accounting favors the transformer. Its lookup mechanism costs
+$O(M \cdot d^2)$ parameters, while the MLP's brute-force expert-per-address
+scheme costs $O(2^A \cdot \text{hidden})$. As $M$ grows, and with it
+$A = \lceil \log_2 M \rceil$, the MLP's hidden-units-per-address budget
+shrinks while the transformer's mechanism stays the same size.
+
+Empirically, that is not what happens.
+
+\begin{center}
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+$M$ & $A$ & Input space & MLP ($h{=}128$) & Transformer (2L, 6000 it) \\
+\midrule
+8  & 3 & $2^{11}$ & 1.000 & 1.000 \\
+16 & 4 & $2^{20}$ & 1.000 & 0.747 \\
+24 & 5 & $2^{29}$ & 0.996 & 0.687 \\
+32 & 5 & $2^{37}$ & 0.870 & 0.664 \\
+48 & 6 & $2^{54}$ & 0.654 & 0.529 \\
+64 & 6 & $2^{70}$ & 0.607 & 0.540 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The MLP scales smoothly until it runs out of capacity at $M \geq 48$, where
+$128 / 2^A = 2$ hidden units per address is too few. The transformer, the
+model expected to keep scaling, plateaus near chance at every $M \geq 16$. The
+MLP \emph{wins} at $M = 16$, $24$, and $32$. \Cref{fig:ch06-scaling} plots the
+two curves from the recorded runs in \texttt{examples/RESULTS.md}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{figures/ch06-scaling.pdf}
+  \caption{Held-out accuracy against memory size $M$ on the single-lookup
+  task, both models trained for 3000 iterations. The MLP tracks high until its
+  hidden budget per address runs thin; the two-layer transformer, the model
+  the theory expects to keep scaling, plateaus near chance from $M=16$ on.
+  The gap between the two is the puzzle the rest of the chapter chases down.}
+  \label{fig:ch06-scaling}
+\end{figure}
+
+The same picture holds when training data is varied at fixed $M=16$. The MLP
+shows the textbook sample-efficiency curve, more data buying higher accuracy,
+while the transformer plateaus near chance regardless of how much it is shown,
+reaching only 0.741 at 5000 examples and 0.738 at 20{,}000. The MLP's success
+at $M=16$ on 5000 examples, covering half a percent of the input space, does
+require it to generalize rather than memorize, so this is not a case of the
+task being too easy. The puzzle is real, and it has two possible readings.
+Either the claim that attention is cheap content-addressable memory is
+\emph{wrong}, which would be a genuine and interesting falsification, or
+something specific to this small-scale setup is keeping the prior from taking
+hold. Telling those two apart is the work of the next section.
 
 \section{Investigation: four parallel hypotheses}\label{sec:four-hypotheses}
-Placeholder.
+
+To find what was actually wrong we ran four independent investigations in
+parallel. The results in this section are read from the recorded experiment
+log, \texttt{examples/RESULTS.md}, rather than re-run in the paired notebook.
+
+\begin{enumerate}
+\item \textbf{Audit the code} for a real bug in attention, layer norm,
+residuals, or the training loop.
+\item \textbf{Sweep optimization recipes}: learning-rate warmup, gradient
+clipping, different optimizers, longer training.
+\item \textbf{Try different supervision formats}, in case sparse supervision
+at only the final position is the bottleneck.
+\item \textbf{Try architecture variants}: layer counts, head counts, model
+widths, learned positional encoding, no causal mask.
+\end{enumerate}
+
+\textbf{The audit cleared the math.} A numerical gradient check on the full
+pipeline in float64, with $\varepsilon = 10^{-6}$, returns a worst relative
+error of $2.3 \times 10^{-7}$ on parameters with a nonzero true gradient.
+Attention forward and backward, layer norm, the multi-head split and merge,
+the feedforward and its GELU, the residual connections, the pre-norm
+structure, and the sparse final-position gradient are all correct. The naive
+float32 check at $\varepsilon = 10^{-4}$ shows apparent errors of order
+$10^{-1}$, which look alarming but are float32 noise from catastrophic
+cancellation in the forward pass, not real disagreement. The paired notebook
+re-runs this audit and confirms the gap: in float64 the worst relative error
+is machine-zero class, while the float32 check at the larger step inflates by
+many orders of magnitude purely from cancellation. The backward pass is not
+the problem.
+
+\textbf{No optimization recipe rescued the model.} Warmup over 500 iterations,
+gradient clipping, larger batches at matched compute, longer training to
+20{,}000 iterations, and both lower and higher learning rates all stay within
+a few points of the baseline at $M=16$. The plateau is a property of the loss
+landscape the model is sitting in, not a tuning artifact.
+
+\textbf{Supervision shape mattered, but did not solve it.} Dense
+per-position supervision \emph{hurts}, dropping to 0.567: the intermediate
+positions carry random next-bit targets, and that noise drowns the one
+informative position. Reweighting the final position by ten recovers most of
+the baseline at 0.726. Inserting a special query token before the target,
+which gives the model an explicit position to predict from, lifts accuracy to
+0.816, meaningfully better than the baseline but still short of the algorithm,
+and training longer does not grok.
+
+\textbf{Two architecture variants reached the ceiling.} Holding everything
+else fixed at $M=16$:
+
+\begin{center}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Architecture variant & $M=16$ test accuracy \\
+\midrule
+Baseline (2L, 1H, sinusoidal PE) & 0.747 \\
+More layers (3L, 1H)             & 0.733 \\
+More layers (4L, 1H)             & 0.729 \\
+Wider ($d_{\text{model}} = 128$) & 0.751 \\
+No causal mask                   & 0.746 \\
+Bigger FFN ($d_{\text{ff}} = 512$) & 0.726 \\
+More heads (4 heads)             & \textbf{0.983} \\
+\textbf{Learned positional encoding} & \textbf{1.000} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Depth, width, feedforward size, and the causal mask are all non-issues: they
+move the number by less than two points. Two things matter, and they matter a
+lot. Switching from sinusoidal to a \emph{learned} positional encoding solves
+the task to 100 percent. Switching to four heads with sinusoidal encoding
+reaches 98.3 percent. Both findings point at the same culprit. At this scale
+the model is fighting its \emph{positional} signal more than it is reading its
+\emph{content} signal, and the next section pins down why.
