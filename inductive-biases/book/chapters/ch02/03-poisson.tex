@@ -4,4 +4,105 @@
 
 \section{Count data: log link and Poisson NLL}\label{sec:poisson}
 
-Placeholder.
+The first genuinely new pairing.
+
+\textbf{Assumed distribution:} $y \mid x \sim \mathrm{Poisson}(\lambda(x))$,
+$y \in \{0, 1, 2, \ldots\}$, non-negative integers. The PMF is
+$p(y \mid \lambda) = \lambda^y e^{-\lambda} / y!$.
+
+\textbf{Link:} logarithm, $\eta = \log \lambda = z$, so $\lambda = e^z$.
+The exponential guarantees $\lambda > 0$ for any real $z$, without any
+clamping or projection.
+
+\textbf{NLL:}
+\[
+  -\log p(y \mid \lambda) = \lambda - y \log \lambda + \log y! = e^z - y z + \log y!
+\]
+The $\log y!$ term does not depend on $z$ and drops from the gradient.
+For the loss value during optimization we omit it as well (it shifts the
+loss by a $y$-dependent constant but does not affect the optimum).
+
+\textbf{Gradient:}
+\[
+  \frac{\partial L}{\partial z} = e^z - y = \lambda - y = \hat{p} - y.
+\]
+A third instance of \Cref{thm:canonical-link}, with no new derivation
+needed.
+
+\textbf{In \texttt{scratchnn}:}
+
+\begin{lstlisting}
+class PoissonNLLLoss(Loss):
+    """Log-link Poisson negative log-likelihood. Expects a single logit.
+
+    The raw output z is interpreted as a log-rate. The predicted rate is
+    lambda = exp(z), guaranteed positive. Target y is a count (typically a
+    non-negative integer, but any real is accepted). The constant log(y!)
+    is omitted; it does not depend on z and does not affect optimization.
+
+    Canonical-link form: dL/dz = exp(z) - y = lambda - y.
+    """
+
+    def value(self, logits, y):
+        z = logits[0]
+        return math.exp(z) - z * y
+
+    def grad(self, logits, y):
+        z = logits[0]
+        return [math.exp(z) - y]
+
+    def probs(self, logits):
+        # Inverse of log link: the predicted rate is exp(z).
+        return [math.exp(logits[0])]
+\end{lstlisting}
+
+Ten lines; same hand-derived backward as the other losses.
+The gradient check in \Cref{sec:gradcheck} passes at
+$9.6 \times 10^{-11}$ for this loss on a Tanh MLP.
+
+\textbf{Worked experiment.} A 1-D regression where the true rate is
+non-monotonic: $\lambda(x) = \max(0.1,\, 2 + 5\sin(\pi x))$ for
+$x \in [0, 2]$. Targets are Poisson counts. Two identical bodies
+($1 \to 16 \to 1$, Tanh hidden), one with identity plus MSE and one
+with log plus Poisson NLL (data seed~42, model seed~42, 200 epochs).
+See \Cref{fig:ch02-poisson}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.75\linewidth]{figures/ch02-poisson.pdf}
+  \caption{Poisson versus MSE head on count regression.
+    True rate $\lambda(x)$ (black), MSE prediction (blue dashed),
+    Poisson NLL prediction (red). Both heads track the mean, but
+    the MSE model reaches a minimum predicted rate of $-0.351$,
+    producing 45 negative-rate predictions on a 201-point grid.
+    The Poisson model's minimum is $0.249$; it cannot predict
+    negative rates by construction.}
+  \label{fig:ch02-poisson}
+\end{figure}
+
+\textbf{Findings, honestly.} On this benign synthetic dataset both
+models fit the conditional mean reasonably well. What matters is the
+\emph{structural} difference:
+
+\begin{itemize}
+\item The MSE model's minimum predicted rate on a 201-point grid is
+  $-0.351$; 45 of those 201 predictions are negative. The Poisson
+  model's minimum is $0.249$; it has zero negative predictions.
+  The Poisson head cannot predict negative rates by construction.
+\item The MSE model could predict any negative number if the training
+  data were less benign; the Poisson model cannot, ever.
+\item On a count dataset where many observations are zero (rare events),
+  the MSE model genuinely fails: it pays MSE penalty for being slightly
+  positive on average, and its predictions cross zero. The Poisson head
+  never does.
+\end{itemize}
+
+The Poisson NLL also accounts for the Poisson property
+$\mathrm{Var}(y) = \mathbb{E}(y) = \lambda$. MSE assumes constant
+variance, which is wrong for counts where small means have small
+variance and large means have large variance. On a benign dataset this
+matters less; on real count data it can matter a great deal.
+
+Use the matching head because the matching head encodes the structural
+constraint, even when on a benign dataset the constraint would not have
+been violated anyway.
