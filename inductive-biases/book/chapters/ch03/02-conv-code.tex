@@ -3,7 +3,123 @@
 % FORWARD:   sec:conv-digits (Task 5)
 
 \section{Forward pass, in code}\label{sec:conv-forward}
-% TODO Task 4
+
+The \texttt{Conv2D} layer in \texttt{scratchnn} holds \texttt{kernels} of
+shape $(C_{\text{out}}, C_{\text{in}}, k, k)$ and a \texttt{bias} of shape
+$(C_{\text{out}},)$. Inputs and outputs are flat \texttt{list[float]},
+indexed as \texttt{c * H * W + r * W + col} for channel \texttt{c}, row
+\texttt{r}, column \texttt{col}. The flat layout keeps the rest of the
+library working unchanged: to \texttt{ReLU}, \texttt{Tanh}, and
+\texttt{Linear}, the conv output is just a flat vector of length
+$C_{\text{out}} \cdot H' \cdot W'$, with the $2$-D shape folded into the
+indexing rather than carried as a nested list.
+
+The forward pass is five nested loops, with no NumPy:
+\begin{lstlisting}
+for c_out in range(C_out):
+    kernel = kernels[c_out]
+    b = bias[c_out]
+    for r in range(out_h):
+        for col in range(out_w):
+            z = b
+            for c_in in range(C_in):
+                for i in range(k):
+                    for j in range(k):
+                        z += kernel[c_in, i, j] * x[c_in, r + i, col + j]
+            out[c_out, r, col] = z
+\end{lstlisting}
+Five loops looks unflattering, and it is exactly as expensive as the math
+says: $C_{\text{out}} \cdot C_{\text{in}} \cdot k^2$ multiply-adds per output
+spatial position, times $H' \cdot W'$ positions. For the digit network of
+\Cref{sec:conv-params} that is $4 \cdot 1 \cdot 9 \cdot 36 = 1296$
+multiply-adds per forward pass. The nesting makes the expense visible in the
+code, which is the pedagogical point: nothing is hidden inside a tensor
+call. The input \texttt{x} is cached for the backward pass, the same pattern
+\texttt{Linear} uses in \Cref{sec:mlp-backprop}.
+
+This is the largest layer this book writes in pure Python. The five-loop form
+is honest about its cost, and at this scale the cost is affordable.
 
 \section{Backward pass, by careful chain rule}\label{sec:conv-backward}
-% TODO Task 4
+
+Let $g_{c_{\text{out}}, r, c} = \partial L / \partial z_{c_{\text{out}}, r,
+c}$ be the gradient flowing into the output feature map. Three quantities
+follow: gradients with respect to the kernel weights, the bias, and the
+input.
+
+\textbf{Kernel gradient.} Each weight $W_{c_{\text{out}}, c_{\text{in}}, i,
+j}$ is read at \emph{every} output position $(r, c)$ in the forward pass. By
+the chain rule its gradient sums over those positions:
+\begin{equation}\label{eq:conv-grad}
+  \frac{\partial L}{\partial W_{c_{\text{out}}, c_{\text{in}}, i, j}}
+  = \sum_{r, c} g_{c_{\text{out}}, r, c}\,
+                x_{c_{\text{in}},\, r+i,\, c+j}.
+\end{equation}
+This is the \texttt{Linear} formula $g_i\, x_j$ from \Cref{sec:mlp-backprop},
+summed over the spatial axes. The reuse of $W$ in the forward pass is exactly
+what causes its gradient to accumulate in the backward pass.
+
+\textbf{Bias gradient.} The bias adds to every output position on its feature
+map equally, so its gradient is the sum of the incoming gradients there:
+\[
+  \frac{\partial L}{\partial b_{c_{\text{out}}}}
+  = \sum_{r, c} g_{c_{\text{out}}, r, c}.
+\]
+
+\textbf{Input gradient.} The pixel $x_{c_{\text{in}}, r', c'}$ was read by the
+output positions $(r, c)$ with $r + i = r'$ and $c + j = c'$, that is $(r, c)
+= (r' - i, c' - j)$. Summing over all kernels and the valid positions where
+the pixel was used,
+\[
+  \frac{\partial L}{\partial x_{c_{\text{in}}, r', c'}}
+  = \sum_{c_{\text{out}}} \sum_{i, j}
+    W_{c_{\text{out}}, c_{\text{in}}, i, j}\,
+    g_{c_{\text{out}},\, r'-i,\, c'-j},
+\]
+with out-of-range terms dropped. This is the spatial transpose of the forward
+pass; in convolutional-network jargon it is a \emph{transposed convolution}.
+
+All three fall out of one pass. Here is the actual \texttt{Conv2D.backward}
+from \texttt{scratchnn}. The offset variables are flat-index bookkeeping (the
+$2$-D shape folded into a \texttt{list[float]}, channel-major then row-major);
+the three lines that carry the math are the \texttt{+=} accumulations, into
+the bias, into the shared kernel, and into the input:
+\begin{lstlisting}
+def backward(self, g):
+    k, in_w, in_hw = self.k, self.in_w, self.in_h * self.in_w
+    out_w, out_hw = self.out_w, self.out_h * self.out_w
+    dx = [0.0] * len(self.x)
+    for c_out in range(self.out_channels):
+        kernel, dkernel = self.kernels[c_out], self.dkernels[c_out]
+        for r in range(self.out_h):
+            for col in range(self.out_w):
+                g_rc = g[c_out * out_hw + r * out_w + col]
+                self.dbias[c_out] += g_rc                    # dL/db
+                for c_in in range(self.in_channels):
+                    ox = c_in * in_hw + r * in_w
+                    ok = c_in * k * k
+                    for i in range(k):
+                        for j in range(k):
+                            xidx = ox + i * in_w + col + j
+                            kidx = ok + i * k + j
+                            dkernel[kidx] += g_rc * self.x[xidx]  # dL/dW
+                            dx[xidx]      += g_rc * kernel[kidx]   # dL/dx
+    return dx
+\end{lstlisting}
+
+The observation that matters: every accumulation in \texttt{Conv2D} is the
+\emph{same} \texttt{+=} pattern the library already uses for mini-batch
+gradients in \texttt{Linear} (\Cref{sec:mlp-backprop}). The mini-batch sums
+per-example gradients; the convolution sums per-position gradients. Because
+one kernel weight is read at every output position in \texttt{forward}, the
+line \texttt{dkernel[kidx] += ...} fires at every position in
+\texttt{backward}. Weight sharing and gradient accumulation are one fact read
+forward and backward: the same operator, at a finer grain.
+
+The \texttt{Layer} contract from \Cref{sec:mlp-backprop} carries over
+unchanged. \texttt{Conv2D} implements \texttt{forward}, \texttt{backward}, and
+\texttt{parameters}, and the generic optimizer, written once, never learns
+that a convolution exists. A numerical gradient check confirms the hand-derived
+backward: the worst relative error is on the order of $10^{-9}$ across small
+random inputs, well under the standard $10^{-4}$ tolerance, regenerated by the
+chapter's paired notebook.
