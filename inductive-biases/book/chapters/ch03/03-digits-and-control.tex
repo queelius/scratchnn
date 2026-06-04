@@ -3,7 +3,102 @@
 % FORWARD:   sec:cnn-bias (Task 6)
 
 \section{Training on 8x8 digits}\label{sec:conv-digits}
-% TODO Task 5
+
+We train the convolutional network on the same data and the same loop as the
+multilayer perceptron: UCI optdigits (3823 training, 1797 test, ten classes),
+pixel values normalized to $[0, 1]$, mini-batch stochastic gradient descent.
+Both models use the same hyperparameters, 40 epochs at learning rate 0.1 with
+batch size 32, so the comparison is on equal footing. Both finish in a few
+minutes of pure Python.
+
+\begin{center}
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Model & Architecture & Parameters & Test accuracy \\
+\midrule
+MLP & $64 \to 32 \to 10$ & 2410 & 96.1\% \\
+CNN & \texttt{Conv2D(1, 4, k=3)} $\to$ \texttt{ReLU} $\to$ \texttt{Linear(144, 10)}
+    & 1490 & 95.4\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The convolutional network is about 38\% smaller in parameter count and lands
+within a percentage point of the MLP. It does not dominate. There are two
+readings, and they have very different consequences:
+\begin{enumerate}
+\item The convolutional prior is wrong for this data, so locality does not
+  help.
+\item The prior is right, but the data has already had locality baked into its
+  preprocessing, so asserting locality again gains little.
+\end{enumerate}
+
+The second reading is the correct one. The $8 \times 8$ UCI digits are not raw
+images. They were produced from the original $32 \times 32$ NIST bitmaps by
+counting the ``on'' pixels in each $4 \times 4$ block. That block-counting step
+is itself a fixed, translation-invariant local feature extractor: every $8
+\times 8$ pixel is already a small local aggregation over a contiguous $4
+\times 4$ patch. By the time the convolution sees the data, much of the spatial
+work is done, which is why the absolute gap is small. On raw $28 \times 28$
+MNIST or on actual photographs the gap between an MLP and a CNN is far larger,
+a few percentage points to tens, precisely because the spatial structure has
+not been pre-summarized away. To decide between the two readings on this
+dataset, rather than argue from the gap, we run an experiment.
 
 \section{The permuted-pixel control}\label{sec:permuted-pixel}
-% TODO Task 5
+
+Apply a single fixed random permutation to the 64 input pixels, then train and
+test both models on the permuted version. For a human the result is
+unreadable: the digits are scrambled past recognition. For the MLP every pixel
+position was interchangeable to begin with, so a relabeling of the coordinates
+changes nothing it can see, and its accuracy should be essentially unchanged.
+For the convolutional network the locality assumption is now \emph{actively
+wrong}: neighbors in the permuted input are no longer neighbors in the
+original digit, so a $3 \times 3$ kernel reads a meaningless window of
+unrelated pixels. The same fixed permutation is applied to both models, under
+the same training regime as before.
+
+\begin{center}
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Model & Pixels & Test accuracy & Drop from standard \\
+\midrule
+MLP ($64\text{-}32\text{-}10$)  & standard & 96.1\% & \\
+MLP ($64\text{-}32\text{-}10$)  & permuted & 95.7\% & $-0.45$ pp \\
+CNN ($1, 4, k{=}3$)             & standard & 95.4\% & \\
+CNN ($1, 4, k{=}3$)             & permuted & 93.9\% & $-1.50$ pp \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The MLP drops by about 0.45 percentage points. The CNN drops by about 1.50,
+more than three times as much (\Cref{fig:permuted-pixel}). That gap is the
+falsification test. If the convolution were ignoring its locality prior,
+treating the restricted receptive field as a bottleneck it works around rather
+than a constraint it exploits, it would drop by the same tiny amount as the
+MLP. It does not. The convolution is genuinely using spatial adjacency, and we
+can tell because removing the adjacency costs it more.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.7\linewidth]{figures/ch03-permuted-pixel.pdf}
+  \caption{The permuted-pixel control. Test accuracy on standard pixels (blue)
+    and after a single fixed random permutation of the 64 inputs (red), for
+    the MLP and the CNN. The MLP, which treats pixel positions as
+    interchangeable, barely moves ($-0.45$ pp). The CNN, whose kernels assume
+    adjacent pixels are related, loses more than three times as much ($-1.50$
+    pp). The direction of the gap is the signature of an inductive bias doing
+    real work; its small absolute size reflects how much spatial structure the
+    $4 \times 4$ block-counting preprocessing has already removed.}
+  \label{fig:permuted-pixel}
+\end{figure}
+
+This is the experimental signature of an inductive bias in operation. The
+\emph{direction} of the gap, the CNN worse off under permutation, confirms the
+prior is load-bearing. The \emph{magnitude}, small in absolute terms because
+the dataset was pre-pooled, reflects how much spatial structure survived into
+the features. The two findings together say more than the headline ``CNN
+matches the MLP with fewer parameters'' can on its own: the parameter
+efficiency is not an artifact of a thin head, it comes from the conv kernel
+actually exploiting adjacency, and when adjacency is destroyed the efficiency
+goes with it.
