@@ -1,0 +1,50 @@
+% DEFINED:   ch:rnn
+% CONTAINS:  section/figure/equation labels live in the \input'd files below
+%            (sec:rnn-prior, sec:rnn-cell, sec:time-equivariance, sec:bptt,
+%            sec:vanishing-gradients, eq:rnn-jacobian, sec:rnn-alice,
+%            fig:ch05-rnn-loss, sec:rnn-pattern, sec:rnn-handoff)
+% RESOLVED:  ch:foundations, sec:mlp-backprop, ch:cnn, sec:permuted-pixel,
+%            ch:fixed-context-lm (all backward into Part I and earlier Part II)
+% CROSS-CHAPTER FORWARD (prose-only, no \Cref): Chapter 6 (the Transformer,
+%            "the next chapter"). Not drafted yet; stays prose.
+
+\chapter[Recurrent Networks]{Recurrent Networks: Time-Translation
+  Equivariance}%
+\label{ch:rnn}
+
+A recurrent network is a multilayer perceptron with a single prior wired
+into its weights: the same computation runs at every step of a sequence,
+and a hidden state carries a summary of the past forward from one step to
+the next. The first move is the convolutional network's move from
+\Cref{ch:cnn}, weight sharing across positions, with one substitution.
+``Position'' is now an index in time rather than in space.
+
+\Cref{ch:cnn} shared one kernel across spatial positions and got
+translation equivariance for images. This chapter makes the same move for
+sequences. The math, the implementation, and even the \texttt{+=}
+accumulation pattern in the backward pass all transfer directly. Two things
+change. The axis the sharing runs along is time instead of space, and the
+recurrence adds a wrinkle the spatial version did not have: the layer's
+output at one step is also its input at the next, so the chain of
+computations forms one long sequential dependency. That dependency is what
+lets the state reach back in principle to any earlier input, and it is also
+what makes a recurrent network hard to train at long range. By the end of
+the chapter we will have earned the right to name vanishing gradients as the
+price of the prior.
+
+The plan is the usual one for Part~II. State the prior, build the smallest
+model that isolates it, read its real code, derive the gradient by hand,
+train it on a corpus small enough to watch, and locate it on the map of
+architectural priors. The corpus is the same char-level \emph{Alice}
+\Cref{ch:fixed-context-lm} used, and the chapter closes by setting the
+recurrent network's unbounded-in-principle memory against that chapter's
+bounded window, the head-to-head comparison the fixed-context chapter
+deferred to here. Everything is pure-Python \texttt{scratchnn}: a stateful
+\texttt{RNNCell}, a \texttt{Linear} head, and \texttt{SoftmaxCrossEntropy},
+trained by a hand-derived backpropagation through time.
+
+\input{chapters/ch05/01-prior-and-cell}
+\input{chapters/ch05/02-equivariance-bptt-vanishing}
+\input{chapters/ch05/03-experiment-and-comparison}
+\input{chapters/ch05/04-pattern-and-handoff}
+\input{chapters/ch05/bib-notes}
