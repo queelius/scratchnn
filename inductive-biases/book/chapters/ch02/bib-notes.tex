@@ -1,7 +1,31 @@
 % DEFINED:   (no new labels)
-% RESOLVED:  (cite keys only)
+% RESOLVED:  cite keys: nelder1972glm, mccullagh1989glm, nix1994heteroscedastic,
+%            bishop1994mdn, mackay2003information, goodfellow2016dlbook
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
 
-Placeholder.
+The exponential-family view of loss functions and the canonical-link
+connection between the link function and the gradient structure originate
+in the theory of generalized linear models (GLMs). The seminal paper is
+\textcite{nelder1972glm}; the standard book-length treatment is
+\textcite{mccullagh1989glm}. Both are foundational references in
+statistics; the neural-network community largely rediscovered the same
+ideas under different names.
+
+Heteroscedastic Gaussian regression with a two-output network, predicting
+mean and variance jointly, is due to \textcite{nix1994heteroscedastic}.
+The formulation in this chapter (predicting log-variance rather than
+variance directly, to enforce positivity) is a minor variant standard in
+modern practice.
+
+Mixture density networks are introduced in \textcite{bishop1994mdn} and
+treated at length in Bishop's later textbook
+\parencite[chapter~5]{mackay2003information}. The implementation using
+softmax weights, softplus scales, and logsumexp for numerical stability
+is the standard form. \textcite{goodfellow2016dlbook} covers MDNs in
+the context of structured output distributions.
+
+For the general treatment of exponential families, see any standard
+probability textbook; \textcite{mackay2003information} is an accessible
+entry point that also connects to information theory.
