@@ -2,19 +2,185 @@
 %            eq:rnn-jacobian
 % RESOLVED:  ch:cnn, sec:permuted-pixel, sec:mlp-backprop (backward into
 %            Part II and Part I)
-% FORWARD:   (none)
+% FORWARD:   (none; the experiment and the Transformer are prose-only)
 
 \section{Time-translation equivariance}\label{sec:time-equivariance}
 
-(placeholder)
+The argument from \Cref{ch:cnn} transfers without change. Replace shift in
+space with shift in time, and every line still holds.
+
+Suppose we shift the input sequence by $\Delta t$, so the new sequence is
+$x'_t = x_{t + \Delta t}$. Starting from the same initial state, the new
+sequence of hidden states is $h'_t = h_{t + \Delta t}$. The cell applies one
+computation at every step, so shifting the input shifts the output by the
+same amount. This is a property of the operator, not of any particular
+weights: it holds at initialization, it holds after training, and it holds
+for every weight setting in between. Weight sharing across time is
+time-translation equivariance, in the same sense that weight sharing across
+space was translation equivariance for images.
+
+(Strictly, the equivariance holds when the initial state $h_0$ is the same.
+In practice we reset $h_0 = 0$ between sequences, which breaks the symmetry
+at sequence boundaries. The within-sequence computation is fully
+time-translation-equivariant, and that is what the inductive-bias claim
+rests on.)
+
+Equivariance is exactly the property the permuted-pixel control of
+\Cref{sec:permuted-pixel} probed, now along the time axis. There the test
+destroyed spatial structure by applying one fixed permutation to the pixels
+of every image. The convolutional network, which assumes neighbors are
+neighbors, lost more accuracy than the multilayer perceptron, which assumes
+nothing about layout, because the convolutional network was actually using
+the locality its weights bake in. The analogue here is a multilayer
+perceptron on a flattened sequence. It would learn the phrase ``the cat'' at
+positions one through three and then fail to recognize the same phrase at
+positions five through seven, because it holds separate weights for each
+position and the two occurrences share none. The recurrent cell recognizes
+the phrase wherever it falls, because the same weights read every position.
+That is the prior earning its keep, and it is the same prior the
+permuted-pixel control of \Cref{ch:cnn} confirmed for space.
 
 \section{Unrolling and backprop through time}\label{sec:bptt}
 
-(placeholder)
+Training a recurrent network means computing the gradient of the loss with
+respect to $W_{xh}$, $W_{hh}$, and $b_h$ for an unrolled sequence of length
+$T$. The standard technique is backpropagation through time. Unroll the cell
+$T$ times, treat the result as a deep feedforward network with $T$ layers
+that happen to share one set of weights, and apply the usual chain rule.
+
+The forward pass processes $x_1, \ldots, x_T$ in order, threading the state
+$h_0 \to h_1 \to \cdots \to h_T$. At each step an output layer, here a
+\texttt{Linear} projection to vocabulary logits followed by
+\texttt{SoftmaxCrossEntropy}, contributes a per-step loss $L_t$. The total
+loss is the sum over steps:
+\[
+  L = \sum_{t=1}^{T} L_t.
+\]
+
+The backward pass is where the recurrence shows up. The gradient on $h_t$
+arrives from two places:
+\[
+  \frac{\partial L}{\partial h_t}
+  =
+  \underbrace{\frac{\partial L_t}{\partial h_t}}_{\text{from $L_t$ directly}}
+  +
+  \underbrace{\frac{\partial L}{\partial h_{t+1}}\,
+              \frac{\partial h_{t+1}}{\partial h_t}}_{\text{from the future,
+              through $h_{t+1}$}}.
+\]
+The first term is the gradient that the output projection at step $t$ sends
+back. The second is everything downstream of step $t$, funneled through the
+single channel the state provides, $h_t$ feeding $h_{t+1}$. In code this is
+one extra argument on the cell's \texttt{backward}. On top of
+\texttt{dh\_out} from the output projection, the cell receives
+\texttt{dstate\_next}, the gradient on $h_t$ that the previous backward call
+computed, the call for step $t+1$. The two are added before the tanh
+derivative is applied:
+\begin{lstlisting}
+def backward(self, dh_out, dstate_next=None):
+    x, h_prev, h_new = self.cache.pop()          # LIFO: this timestep
+    H = self.hidden_size
+    if dstate_next is None:
+        dstate_next = [0.0] * H
+    # Two gradient paths into h_t: this step's output, and the future.
+    dh_total = [dh_out[i] + dstate_next[i] for i in range(H)]
+    # Through tanh: d/dz tanh(z) = 1 - h^2.
+    da = [dh_total[i] * (1.0 - h_new[i] * h_new[i]) for i in range(H)]
+    # Accumulate weight grads (the += across timesteps), as in Linear.
+    for i in range(H):
+        for j in range(self.input_size):
+            self.dW_xh[i][j] += da[i] * x[j]
+        for j in range(H):
+            self.dW_hh[i][j] += da[i] * h_prev[j]
+        self.db_h[i] += da[i]
+    # Backprop to this step's input and to the previous state.
+    dx = [sum(self.W_xh[i][j] * da[i] for i in range(H))
+          for j in range(self.input_size)]
+    dh_prev = [sum(self.W_hh[i][j] * da[i] for i in range(H))
+               for j in range(H)]
+    return dx, dh_prev
+\end{lstlisting}
+The single line \texttt{dh\_total = dh\_out + dstate\_next} is the whole of
+backpropagation through time: the gradient at step $t$ is what came back from
+this step's output plus what came back from the future through $h_{t+1}$.
+
+The weight gradients accumulate across all $T$ timesteps with \texttt{+=}.
+This is the same accumulation the library has used since the \texttt{Linear}
+layer of \Cref{sec:mlp-backprop}, in a third flavor. Per-example gradients
+sum within a mini-batch. Per-position gradients sum within a single
+convolutional forward, because the kernel is reused at every spatial
+position. Per-timestep gradients sum within one recurrent unroll, because
+the recurrent matrix is reused at every step. The same operation runs at a
+finer grain each time: across examples, then across positions, then across
+time.
+
+Two pieces of bookkeeping make the unroll trainable. The first is gradient
+clipping. After all $T$ backward steps, the global L2 norm of the gradient
+is capped at $5$, the standard mitigation for the exploding-gradient half of
+the problem the next section names. The second is the mean-gradient step.
+The gradients summed over the $T$ steps are divided by $T$ before the
+update, which turns the sum back into a mean and keeps the effective
+learning rate sane regardless of how long the unroll was. This is exactly
+the convention \texttt{Network.step(lr, n)} uses for a mini-batch, with $T$
+playing the role of the batch size.
+
+A gradient check confirms the derivation. Unroll the cell for $T = 3$ with a
+small \texttt{Linear} output projection and \texttt{SoftmaxCrossEntropy},
+build the analytic gradient with one forward and backward sweep, and compare
+every parameter against a central finite difference. The worst relative
+error lands on the order of $10^{-9}$, far under the $10^{-4}$ tolerance the
+book has used since \Cref{ch:foundations}. The chapter's paired notebook
+regenerates this, and \texttt{scratchnn}'s
+\texttt{test\_gradients.py} carries the same check.
 
 \section{Vanishing gradients}\label{sec:vanishing-gradients}
 
-(placeholder)
+Backpropagation through time is correct, and it is fragile. Each step of the
+backward pass multiplies the gradient on the state by a Jacobian:
 \begin{equation}\label{eq:rnn-jacobian}
-  x = x.
+  \frac{\partial h_{t+1}}{\partial h_t}
+  = \operatorname{diag}\!\bigl(1 - h_{t+1}^2\bigr)\, W_{hh}.
 \end{equation}
+The diagonal factor is the tanh derivative, componentwise; the matrix factor
+is the recurrent weight matrix. To send a gradient back $k$ steps, the
+backward pass multiplies $k$ of these Jacobians together, so the magnitude
+of the gradient on an early step is governed by the product. That product is
+in turn governed by the spectral properties of $W_{hh}$, scaled by the tanh
+derivative, which lies in $(0, 1]$ and is almost always strictly below $1$.
+
+The product of many matrices of roughly constant size grows or shrinks
+geometrically. If the spectral radius of the effective Jacobian sits below
+$1$, the gradient on early timesteps decays exponentially in $k$, and those
+parameters receive essentially no signal from losses many steps later. If it
+sits above $1$, the gradient blows up, and one bad sequence can throw the
+weights off entirely. This is the vanishing-gradient problem, with exploding
+gradients as its twin, and it is the reason a vanilla recurrent network
+cannot easily learn dependencies more than a few dozen steps long. The
+architecture is the right shape for sequences in principle. The learning
+dynamics make long-range information transfer hard in practice.
+
+This is the price of the prior, and the experiment later in this chapter
+shows it from both sides. Numerically, the paired notebook pushes a unit
+gradient back through the recurrence alone and watches its norm fall by
+several orders of magnitude over a few dozen steps, a direct measurement of
+\Cref{eq:rnn-jacobian} compounding. Qualitatively, the generated text drifts
+over long spans even after the local structure is correct: spelling and
+short words come out right while coherence across a sentence wanders. That
+drift is not a separate defect. It is the same limit, the state failing to
+carry information far enough, showing in the output rather than in the
+gradient.
+
+Two mitigations are standard, and the chapter mentions them without building
+them. Gated cells, the long short-term memory and the gated recurrent unit,
+replace the simple tanh recurrence with an additive update. The long
+short-term memory keeps a cell state whose Jacobian is
+$\operatorname{diag}(f_t)$ for a learned forget gate $f_t$ with entries in
+$[0, 1]$; when the gate sits near $1$, the gradient flows through
+unattenuated, a gradient highway across many steps. This library implements
+the vanilla \texttt{RNNCell} only, and the extension is mechanical: more
+matrix multiplies, one per gate and one for the cell-state update, the same
+\texttt{+=} accumulation in the backward pass, and no new conceptual
+machinery. Gradient clipping, already in the training loop, handles the
+exploding half. The point worth keeping is that this one Jacobian-product
+issue is what motivated the entire gated-recurrent literature, and
+eventually the architecture the next chapter turns to.
