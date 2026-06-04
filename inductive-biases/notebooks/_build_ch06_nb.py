@@ -343,8 +343,8 @@ The architectural theory predicts the transformer should keep scaling as the
 memory grows: its lookup mechanism is $O(M \cdot d^2)$, while the MLP's
 brute-force expert-per-address scheme is $O(2^A \cdot \text{hidden})$ and
 must run out of capacity. We grow $M$ across $\{8,16,24,32\}$ and train both
-models (MLP hidden 128; 2-layer 1-head transformer $d_{\text{model}}=32$) for
-3000 iterations each on 20,000 examples. These runs take roughly half an
+models (MLP hidden 128; 2-layer 1-head transformer $d_{\text{model}}=64$) for
+6000 iterations each on 20,000 examples. These runs take roughly half an
 hour in pure NumPy and are recorded in `examples/RESULTS.md`; the cell below
 plots the recorded numbers, while the grokking experiment above is the live
 re-run.
@@ -367,7 +367,7 @@ code(r"""def run_sweep(M_values, n_train=20000, n_test=2000, n_iters=3000, seed=
                               batch_size=64, lr=1e-3, seed=seed, silent=True)
         mlp_acc, _ = eval_mlp(mlp, X_te, Y_te)
 
-        xf = BitTransformer(d_model=32, n_heads=1, d_ff=64, n_layers=2,
+        xf = BitTransformer(d_model=64, n_heads=1, d_ff=64, n_layers=2,
                             max_T=T, seed=seed)
         train_transformer_on_examples(xf, X_tr, Y_tr, n_iters=n_iters,
                                       batch_size=32, lr=1e-3, seed=seed,
@@ -382,8 +382,8 @@ code(r"""def run_sweep(M_values, n_train=20000, n_test=2000, n_iters=3000, seed=
     return rows
 
 
-# Recorded results from examples/RESULTS.md (the full 3000-iter NumPy sweep
-# takes ~30 min). Reproduce live with: run_sweep([8, 16, 24, 32], n_iters=3000)
+# Recorded results from examples/RESULTS.md (the full 6000-iter d=64 sweep is
+# a long run). Reproduce live with: run_sweep([8, 16, 24, 32], n_iters=6000)
 sweep = [
     {"M": 8,  "A": 3, "input_space": 2 ** 11, "mlp_acc": 1.000, "xf_acc": 1.000},
     {"M": 16, "A": 4, "input_space": 2 ** 20, "mlp_acc": 1.000, "xf_acc": 0.747},
@@ -416,11 +416,11 @@ fig, ax = plt.subplots(figsize=(6.0, 4.0))
 ax.plot(Ms, mlp_accs, marker="o", color="#4C72B0",
         label="MLP (hidden 128)")
 ax.plot(Ms, xf_accs, marker="s", color="#C44E52",
-        label="Transformer (2L, 1H, d=32, sinusoidal PE)")
+        label="Transformer (2L, 1H, d=64, sinusoidal PE)")
 ax.axhline(0.5, linestyle=":", color="#BBBBBB", label="chance")
 ax.set_xlabel("memory size M")
 ax.set_ylabel("held-out accuracy")
-ax.set_title("Single-lookup accuracy vs memory size (3000 iters)")
+ax.set_title("Single-lookup accuracy vs memory size (6000 iters)")
 ax.set_xticks(Ms)
 ax.set_ylim(0.4, 1.05)
 ax.legend(frameon=False, loc="lower left")
