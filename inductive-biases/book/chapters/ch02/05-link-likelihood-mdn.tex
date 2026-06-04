@@ -4,8 +4,80 @@
 
 \section{Link and likelihood are independent choices}\label{sec:link-likelihood}
 
-Placeholder.
+The catalogue in \Cref{sec:catalogue} paired each likelihood with its
+canonical link. That is the \emph{natural} pairing, the one that makes
+the gradient collapse to $\hat{p} - y$ and the optimization land
+cleanly. It is not the \emph{only} pairing.
+
+Suppose the target $y$ is a continuous proportion: $y \in [0, 1]$,
+something like ``fraction of pixels lit,'' ``vote share,'' or ``relative
+humidity.'' Not a class label, a \emph{number}. We want the prediction
+$\hat{p} \in (0, 1)$ as well.
+
+The natural link to enforce $\hat{p} \in (0, 1)$ is the sigmoid:
+$\hat{p} = \sigma(z)$. We can pair sigmoid with two different
+likelihoods:
+
+\textbf{Sigmoid plus MSE on the sigmoid output.} Loss:
+$L = \tfrac{1}{2}(y - \sigma(z))^2$. Implicit likelihood: Gaussian
+noise in proportion space. Gradient: $(\sigma(z) - y) \cdot \sigma'(z)$,
+the chain rule. This works fine in the bulk of the domain but saturates
+near $z \to \pm\infty$ (where $\sigma'(z) \to 0$ and gradient flow
+stalls), making it hard for the model to push predictions very near the
+boundaries.
+
+\textbf{Sigmoid plus Beta NLL.} Predict the mean
+$\mu = \sigma(z_\mu)$ and a ``precision'' $\nu = \mathrm{softplus}(z_\nu)$,
+set $\alpha = \mu\nu$, $\beta = (1 - \mu)\nu$, and use the Beta NLL,
+\[
+  L = -(\alpha - 1)\log y - (\beta - 1)\log(1 - y) + \log B(\alpha, \beta).
+\]
+This treats $y$ as drawn from a Beta distribution. It is far more
+sensitive than the MSE choice near the boundaries (where Beta
+log-density is heavy-tailed in the right way for proportion data) and
+predicts a full posterior over $[0, 1]$ instead of a point.
+
+Same link (sigmoid). Different likelihoods (Gaussian on the sigmoid
+output versus Beta directly). The choice changes what is assumed about
+the noise distribution, how the loss treats extreme values, and whether
+the head is one output or two.
+
+This breaks the catalogue's apparent one-to-one. The link function is
+not uniquely determined by the assumed distribution. There is a canonical
+pairing, the one the theorem gives, but it is one choice among many.
+The skill is recognizing the choice.
+
+Beta NLL is not in \texttt{scratchnn}, but it is a natural extension:
+it requires only \texttt{math.lgamma}, which is in the standard library.
+The components (sigmoid, softplus, and the Beta log-density) all follow
+the same \texttt{Loss} interface as the losses already built. The
+pedagogical point of this section is that link and likelihood are
+independent, not that every likelihood needs to be in the library.
 
 \section{Beyond unimodal: a pointer to mixture density networks}\label{sec:mdn}
 
-Placeholder.
+All of the heads above assumed $p(y \mid x)$ is unimodal. When it is
+not, a unimodal head collapses: a robot arm with two valid joint
+configurations for the same end-effector pose, an inverse problem with
+multiple solutions, the conditional next-frame distribution for a
+stochastic video model. A Gaussian head will predict the mean of the
+modes, which may lie in a region of \emph{zero density} under the true
+distribution.
+
+A \textbf{mixture density network (MDN)} outputs the parameters of a
+$K$-component Gaussian mixture: $K$ means, $K$ scales, and $K$ mixture
+weights (the latter through a softmax head). The NLL is
+\[
+  -\log \sum_{k=1}^{K} \pi_k(x)\,\mathcal{N}\!\bigl(y \mid \mu_k(x), \sigma_k(x)^2\bigr).
+\]
+Standard regression collapses to the midpoint between two modes; the
+MDN captures each mode with its own component, weighted by its own
+probability.
+
+The MDN is not in \texttt{scratchnn}. It is a natural extension, framed
+the same way \Cref{sec:autograd-note} frames automatic differentiation:
+the idea is the same framework (output head plus matching NLL), the
+implementation composes pieces the library already has (softplus for the
+scales, softmax for the weights, logsumexp for the stable mixture
+log-density), plus the hand-derived gradient through the mixture.
+Building it is the next thing to build, not a new concept.
