@@ -1,11 +1,124 @@
 % DEFINED:   sec:rnn-prior, sec:rnn-cell
-% RESOLVED:  ch:foundations (backward into Part I)
-% FORWARD:   (none)
+% RESOLVED:  ch:foundations, ch:cnn, ch:fixed-context-lm (backward into
+%            Part I and earlier Part II)
+% FORWARD:   (none; the vanishing-gradient limit is a later section, prose-only)
 
 \section{The prior}\label{sec:rnn-prior}
 
-(placeholder)
+A sequence is an ordered series of inputs $x_1, x_2, \ldots, x_T$. The
+contents might be characters in a string, tokens in a sentence, ticks of a
+time series, frames of a video, or pixels of an image read out in raster
+order. The structure that makes it a sequence is that time matters: $x_t$
+sits closer to $x_{t+1}$ than to $x_{t+5}$, and a computation that is useful
+at one step should be useful at any step.
+
+Two assumptions turn that structure into a prior, and they have the same
+shape as the convolutional network's. The first is locality in time: the
+prediction at step $t$ leans most heavily on the recent past, not on every
+token from the start of the sequence with equal weight. The second is
+time-translation equivariance: shift the input sequence by $\Delta t$ and
+the output shifts by the same $\Delta t$. The same computation applies at
+every step, so the model's weights do not depend on the absolute timestamp.
+Neither assumption is free; each is a bet that the data respects a symmetry,
+and the next section makes the bet concrete.
+
+A multilayer perceptron applied to a flattened sequence has neither prior.
+It treats $x_t$ at every $t$ as an independent feature, with its own slab of
+weights for each position. Given enough data it can still learn the right
+function, but it learns each position from scratch and does not carry what
+it learned at one offset over to another. A pattern seen only early in
+training at one position is a pattern it has never seen at any other.
+
+There are two ways to wire the temporal priors into an architecture, and
+they part on a single question: how much of the past does a prediction get
+to see. \Cref{ch:fixed-context-lm} took the first answer. Look at a fixed
+window of the last $N$ tokens, share the embedding across positions, and
+feed a small head. That is a bounded window, and everything older than $N$
+is gone by construction. The recurrent network takes the second answer.
+Rather than a fixed slice of the past, it carries a hidden state vector
+$h_t$ that summarizes the past, and it updates that summary one step at a
+time. The next state $h_{t+1}$ is computed from the current state $h_t$ and
+the current input $x_{t+1}$, using the same weights at every step. Because
+the state is a running summary rather than a window, the model can in
+principle let a prediction depend on an input from arbitrarily far back. In
+practice that reach has a hard limit, which a later section in this chapter
+spends its whole length on.
 
 \section{The cell}\label{sec:rnn-cell}
 
-(placeholder)
+A vanilla recurrent cell is one equation:
+\[
+  h_t = \tanh\!\bigl(W_{xh}\, x_t + W_{hh}\, h_{t-1} + b_h\bigr),
+\]
+where $W_{xh}$ is the input-to-hidden weight matrix, $W_{hh}$ is the
+recurrent hidden-to-hidden matrix, $b_h$ is the bias, and $\tanh$ is applied
+componentwise to the pre-activation vector. The cell's output is $h_t$
+itself. A separate \texttt{Linear} layer projects $h_t$ to logits, or to
+whatever shape the task downstream wants, the same division of labor every
+chapter has kept: the body produces a representation, and a head interprets
+it.
+
+The property that makes this a recurrent network and not just a stack of
+distinct layers is that $W_{xh}$, $W_{hh}$, and $b_h$ do not depend on $t$.
+One set of weights computes the state update at every step. This is weight
+sharing along the time axis, the exact analogue of the convolutional
+network's weight sharing across spatial positions in \Cref{ch:cnn}. There
+the same kernel slid across an image; here the same update slides along a
+sequence.
+
+In code the cell extends the \texttt{Layer} contract from
+\Cref{ch:foundations}. A stateless layer (\texttt{Linear}, \texttt{Tanh},
+\texttt{ReLU}) has \texttt{forward(x)} returning an output and
+\texttt{backward(g)} returning the gradient on its input. A stateful layer
+extends both signatures: \texttt{forward(x, state)} takes the previous state
+and returns \texttt{(output, new\_state)}, and \texttt{backward(g\_out,
+dstate\_next)} takes a gradient on the new state and returns
+\texttt{(dL/dx, dL/dstate\_prev)}. For a vanilla cell the new state equals
+the output, both are $h_t$, so the forward returns the same vector twice, as
+\texttt{(h\_new, h\_new)}. The two protocols share \texttt{parameters()},
+so the generic \texttt{step()} and \texttt{zero\_grad()} from
+\Cref{ch:foundations} need no change. This is the same split between a
+stateful module and a stateless function that production frameworks
+navigate.
+
+Parameter storage matches \texttt{Linear} exactly. The cell holds $W_{xh}$
+and $W_{hh}$ as lists of rows, one row per hidden unit, alongside the bias
+vector, so \texttt{parameters()} yields one (values, gradients) pair per row
+and the optimizer steps them without knowing a recurrence exists. Here is
+the real forward, with the constructor summarized in a comment:
+\begin{lstlisting}
+class RNNCell(Layer):
+    def __init__(self, input_size, hidden_size):
+        # W_xh, W_hh, b_h and their gradient accumulators. Xavier-style
+        # init. Stored as list[list[float]], one row per hidden unit, like
+        # Linear, so parameters() yields one (values, grads) pair per row.
+        # A LIFO cache holds (x, h_prev, h_new) per forward, popped in
+        # backward.
+        ...
+
+    def forward(self, x, state=None):
+        H = self.hidden_size
+        if state is None:
+            state = [0.0] * H
+        h_new = [0.0] * H
+        for i in range(H):                       # one row per hidden unit
+            z = self.b_h[i]
+            for j in range(self.input_size):
+                z += self.W_xh[i][j] * x[j]      # W_xh @ x
+            for j in range(H):
+                z += self.W_hh[i][j] * state[j]  # W_hh @ h_prev
+            h_new[i] = math.tanh(z)
+        self.cache.append((x, state, h_new))     # LIFO, popped in backward
+        return h_new, h_new
+
+    def backward(self, dh_out, dstate_next=None):
+        ...  # the BPTT step, shown in full in a later section
+        return dx, dh_prev
+\end{lstlisting}
+The forward is two nested loops, the same matrix-vector shape as
+\texttt{Linear}, with the second loop adding the recurrent contribution
+$W_{hh}\, h_{t-1}$ on top of the input contribution $W_{xh}\, x_t$. The only
+genuinely new line is the cache push. The cell saves the inputs it will need
+to differentiate, because the backward pass that undoes this step runs much
+later, after the whole sequence has been read. That deferred, accumulated
+backward is the subject of the next section.
