@@ -3,7 +3,78 @@
 % FORWARD (prose-only): Chapter 4 (sequences), Chapter 6 (the Transformer)
 
 \section{Inductive bias, named}\label{sec:cnn-bias}
-% TODO Task 6
+
+The convolutional network commits to two priors. Made explicit:
+\begin{itemize}
+\item \textbf{Locality.} A unit reads a $k \times k$ window, not the whole
+  image. Long-range interactions emerge only by stacking conv layers, each
+  output cell's receptive field growing with depth.
+\item \textbf{Translation equivariance.} The same weights apply at every
+  position. Shift the input, shift the output.
+\end{itemize}
+What it gives up is equally concrete:
+\begin{itemize}
+\item \textbf{Free interaction between distant pixels.} An MLP can wire the
+  upper-left corner directly to the lower-right with a single weight. One conv
+  layer cannot represent that at all; deeper stacks can, but only indirectly,
+  through receptive-field growth.
+\item \textbf{Position-specific filters.} If the absolute location of the
+  digit carries information, the convolution has to compensate elsewhere, or
+  be given extra channels, or be helped by centering the input before it
+  arrives.
+\end{itemize}
+
+This is the trade, and it is the same shape of trade \Cref{sec:inductive-biases}
+described. An MLP is the most generic supervised model: every input may
+interact with every other on equal footing. A CNN asserts that the useful
+interactions on an image are local and translation-equivariant, and bakes that
+assertion into the weights through structural reuse. Whether the assertion
+pays is empirical, not a matter of taste. The CNN matches the MLP with fewer
+parameters here, where the spatial structure was already half-extracted by
+preprocessing, and it pulls clearly ahead on data where that structure is
+intact. On genuinely tabular features, where there is no spatial adjacency to
+exploit, the same prior is a lie and the CNN loses. The right prior is the one
+that matches the data, and the permuted-pixel control is how we checked that
+it does.
+
+This chapter took the architecture axis on its first non-trivial commitment,
+to a specific group of symmetries, the $2$-D translations. The next chapter
+makes the same kind of move on a different data type. Sequences, whether text
+or time series, carry their own notion of locality, the recent past mattering
+more than the distant past, and their own translation symmetry, a shift in
+time rather than in space. A fixed-context language model, and after it a
+recurrent network, will commit to those priors by reusing weights across time
+steps instead of across spatial positions. Different data, the same lesson:
+structural weight sharing is how a network commits to an invariance, and
+committing to the right invariance is how it learns more from less.
 
 \section{What stayed pure Python, and what will not}\label{sec:pure-python-boundary}
-% TODO Task 6
+
+The five-nested-loop \texttt{Conv2D} worked here because the problem is small:
+an $8 \times 8$ single-channel input, a $3 \times 3$ kernel, four output
+channels. The forward pass is about 1300 multiply-adds per example and the
+backward pass roughly the same, so 3823 examples over 40 epochs finish in a
+few minutes of interpreted Python.
+
+This is the last large layer this book writes in pure Python. For $28 \times
+28$ MNIST with several conv layers and tens of channels each, the inner loop
+count grows by two orders of magnitude, and the five nested loops stop being
+merely unflattering and become intractable. At that point a vectorized
+implementation, first in NumPy and eventually with batched tensor operations
+in a framework, is genuine relief rather than premature optimization. The math
+does not change and the indices do not change; only the implementation moves
+from interpreted loops to compiled tensor calls. The chapter on the Transformer
+will reach for NumPy for exactly this reason, and will say so plainly when it
+arrives. Pure Python has carried the whole library to here; it does not have to
+carry it everywhere.
+
+One natural extension is worth a line, in the spirit of \Cref{ch:foundations}'s
+closing note on automatic differentiation. The convolution produces feature
+maps whose positions track the input, which is equivariance. A classifier
+usually wants the opposite, invariance: the digit is a seven wherever it sits.
+Averaging each feature map down to a single number, a global average pool,
+collapses an equivariant stack into a translation-invariant reader, discarding
+where the activation was while keeping that it occurred. The library includes
+such a layer; stacking it after the convolution is the natural next step toward
+a deeper invariant classifier, and it needs no new machinery, only the
+\texttt{Layer} contract already in hand.
