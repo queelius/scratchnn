@@ -1,0 +1,72 @@
+% DEFINED:   ch:transformer
+% CONTAINS:  section/figure/table labels live in the \input'd files below
+%            (sec:attention-lookup, sec:pointer-task, sec:one-layer-limit,
+%            sec:exp-single-lookup, fig:ch06-grokking, sec:multihead,
+%            sec:exp-multihop, sec:scaling-puzzle, fig:ch06-scaling,
+%            sec:four-hypotheses, sec:pe-scale-fix, sec:partial-confirmation,
+%            tab:depth-transition, sec:three-axes, sec:richer-dgp)
+% RESOLVED:  ch:foundations, sec:inductive-biases, sec:parallel-axes, ch:cnn,
+%            ch:rnn, ch:fixed-context-lm (all backward into Part I and earlier
+%            Part II)
+% CROSS-CHAPTER FORWARD (prose-only, no \Cref): Chapter 7 (interpretability:
+%            reverse-engineering this trained transformer, induction heads,
+%            in-context learning) and Chapter 8 (reinforcement learning; the
+%            heads-as-bias frame). Neither is drafted yet; stays prose.
+
+\chapter[Attention as Content-Addressable Memory]{Attention as
+Content-Addressable Memory}%
+\label{ch:transformer}
+
+\Cref{ch:cnn,ch:fixed-context-lm,ch:rnn} each committed to a structural
+prior about \emph{which positions matter}. The convolutional network shared
+one kernel across space and bet on locality. The fixed-context model fixed a
+window and bet that the recent past was enough. The recurrent network shared
+one cell across time and squeezed the whole past through a single state. The
+transformer makes a stranger and more flexible commitment. It does not
+decide in advance which positions matter. It commits to a \emph{mechanism}
+for deciding, from the data, position by position, on the fly.
+
+The architectural claim of this chapter fits in one sentence. An attention
+head is a learned content-addressable lookup: a query matches against keys
+to retrieve values, exactly as a pointer dereference reads memory by
+address. Stacking attention layers composes lookups into multi-hop reads.
+That is the entire structural prior of a transformer, and the rest of the
+chapter is the unpacking of it.
+
+To make the claim falsifiable we build a synthetic data-generating process
+whose structure \emph{requires} content-addressable memory, train small
+transformers on it, and watch attention learn to do what its mechanism is
+built for. The task has a single-lookup variant and a multi-hop variant, so
+it can test both halves of the claim: that one attention layer is a lookup,
+and that depth is the number of composed lookups.
+
+The chapter does two things. The first half states the task, derives why one
+attention layer cannot compose two lookups, and confirms the depth argument
+at small scale. The second half is the part the chapter did not set out to
+do. When we scale the task by enlarging the memory, the transformer
+suddenly loses to a brute-force multilayer perceptron, and we have to debug
+why. The debugging is where the chapter earns its real lesson, and where the
+book's third axis appears: the right architecture is necessary but not
+sufficient, and whether gradient descent realizes the bias-permitted
+solution depends on positional-encoding scale, initialization, head count,
+and depth.
+
+This is also where the book's pure-Python through-line ends. The
+convolutional, fixed-context, and recurrent models were
+\texttt{scratchnn}, model and experiment, standard library only. The
+transformer here is hand-derived NumPy. Every backward pass is still
+written out by hand, the way \Cref{ch:foundations} wrote out backpropagation
+for the multilayer perceptron, but the operators are vectorized in NumPy
+because pure-Python loops over the $T \times T$ attention matrix are not
+tractable. The listings in this chapter come from that NumPy implementation,
+\texttt{examples/transformer.py}. The chapter says plainly where the switch
+happens and walls off the one place a second framework appears: a scaling
+sweep run in PyTorch, cited as a table, with the warning that its internals
+differ from the NumPy model so its numbers are read only against each other.
+
+\input{chapters/ch06/01-lookup-and-task}
+\input{chapters/ch06/02-depth-and-multihead}
+\input{chapters/ch06/03-scaling-and-investigation}
+\input{chapters/ch06/04-fix-and-verification}
+\input{chapters/ch06/05-three-axes-and-appendix}
+\input{chapters/ch06/bib-notes}
