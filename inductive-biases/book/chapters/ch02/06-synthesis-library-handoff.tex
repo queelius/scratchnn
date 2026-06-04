@@ -1,15 +1,170 @@
 % DEFINED:   sec:parallel-axes, sec:library-additions, sec:handoff
 % RESOLVED:  sec:inductive-biases
-% FORWARD (prose-only): Chapter 3 (CNN), Part II, Chapter 8 (RL)
+% FORWARD (prose-only, no \Cref): Chapter 3 (CNN), Part II, Chapter 8 (RL)
 
 \section{Inductive bias, the parallel axis}\label{sec:parallel-axes}
 
-Placeholder.
+\Cref{sec:inductive-biases} in Chapter~1 named two axes at which the
+prior enters a supervised model and previewed the synthesis. This section
+completes it.
+
+\textbf{The two axes, stated precisely:}
+
+\begin{itemize}
+\item \textbf{Architecture.} A prior over how the network computes
+  features: which inputs interact, at what resolution, with what
+  sharing. An MLP assumes every input is independent of every other and
+  must learn all relationships from data. A convolutional network assumes
+  nearby positions matter together and the same detector should fire
+  anywhere. A recurrent network assumes the same computation runs at
+  every step of a sequence. A Transformer assumes positions interact
+  pairwise through learned, content-addressable lookup.
+\item \textbf{Output head.} A prior over the distribution of $y$ given
+  the network's raw output: which family of distributions is plausible,
+  and what the link function maps the unconstrained output into.
+\end{itemize}
+
+The two axes are \emph{independent and composable}. Any architecture can
+pair with any output head, provided the head's input dimension matches
+the architecture's output. The composability is literal: the
+\texttt{Network} class takes a list of layers and a loss; the layers are
+the body (any architecture), the loss is the head (any output
+distribution). Nothing in the body knows about the head, and nothing in
+the head knows about the body.
+
+\textbf{The composability matrix.} Four concrete examples that cross
+body type with head type:
+
+\begin{itemize}
+\item \textbf{CNN body, Poisson head}: pixel-wise photon-counting
+  imaging. The CNN imposes locality and translation equivariance; the
+  Poisson head encodes that pixel counts are non-negative integers with
+  variance equal to mean.
+\item \textbf{Transformer body, Categorical head over a vocabulary}: a
+  language model. The Transformer imposes pairwise content-addressable
+  attention; the Categorical head encodes that the next token is one of
+  $K$ mutually exclusive choices.
+\item \textbf{MLP body, heteroscedastic Gaussian head}: regression with
+  calibrated, input-dependent uncertainty. The MLP makes no spatial or
+  sequential assumption; the Gaussian head encodes that the response is
+  real-valued with per-input noise.
+\item \textbf{CNN body, Bernoulli head per pixel}: binary segmentation.
+  The CNN imposes spatial structure; the Bernoulli head encodes that
+  each pixel is independently foreground or background.
+\end{itemize}
+
+In each case the architecture is a prior about the \emph{function}
+(how features compose) and the head is a prior about the
+\emph{distribution} (what $y$ is). They multiply: a matched head buys
+sample efficiency \emph{on top of} a matched body, not instead of it.
+
+\textbf{What a matched head gives you:}
+
+\begin{itemize}
+\item \textbf{Sample efficiency.} Constraints encoded by the link
+  (non-negativity via log, boundedness via sigmoid, simplex membership
+  via softmax) are free. The network does not spend parameters on
+  relearning them from data.
+\item \textbf{Calibrated uncertainty.} A two-output Gaussian head
+  reports per-input $\sigma$. A Categorical head reports a probability
+  vector. Both are usable by downstream decisions without a
+  post-processing step.
+\item \textbf{Honesty about the data.} A Poisson head says ``I am
+  modeling counts.'' That is a statement to the reader of the code, as
+  much as a structural constraint on the optimizer.
+\end{itemize}
+
+\textbf{What a mismatched head costs you:}
+
+\begin{itemize}
+\item Wasted capacity: the network must discover, from data, constraints
+  the link could have given for free (non-negativity, boundedness,
+  normalization).
+\item Pathological predictions in low-density regions: negative counts
+  under MSE, point estimates between modes under a unimodal head,
+  miscalibrated confidence under a saturated softmax.
+\item Misleading uncertainty: MSE gives no uncertainty at all; a
+  poorly calibrated softmax is a known failure mode in deployed
+  classifiers.
+\end{itemize}
+
+This shape is identical to the architecture story in
+\Cref{sec:inductive-biases}. Architectural priors and output-head priors
+are parallel commitments, each evaluable on the same questions: does the
+prior match the data? does it improve sample efficiency when matched?
+does it hurt when mismatched?
+
+The two axes interact but do not conflate. Getting both right is a
+multiplication, not an addition: a language model is not just a good
+architecture (Transformer) or just a good head (Categorical), it is the
+combination. The architecture encodes how context matters; the head
+encodes what the prediction is. Neither is optional.
 
 \section{Library additions}\label{sec:library-additions}
 
-Placeholder.
+\texttt{src/scratchnn/neural\_net.py} contains the following additions
+relevant to this chapter. All fit the \texttt{Loss} interface
+(\texttt{value}, \texttt{grad}, \texttt{probs}); all are standard-library
+only; all have a \texttt{gradient\_check} case.
+
+\begin{itemize}
+\item \textbf{\texttt{softplus(z)}} (helper):
+  $\log(1 + e^z)$, evaluated as $\max(z, 0) + \log(1 + e^{-|z|})$
+  to avoid overflow. Used inside \texttt{GaussianNLLLoss} to map a
+  real-valued network output to a positive scale parameter. Derivative
+  is the sigmoid.
+\item \textbf{\texttt{MSELoss}}: identity link, mean squared error.
+  Single-output regression. The $\tfrac{1}{2}$ convention makes the
+  gradient $z - y$, matching the canonical $\hat{p} - y$ pattern of
+  the other losses.
+\item \textbf{\texttt{PoissonNLLLoss}} (ten lines): single logit, log
+  link. $L = e^z - yz$ (omitting $\log y!$).
+  $\partial L / \partial z = e^z - y$. \texttt{probs} returns $e^z$.
+\item \textbf{\texttt{GaussianNLLLoss}} (fifteen lines): two logits,
+  $\mu = z_\mu$, $\sigma = \mathrm{softplus}(z_s)$.
+  $L = \tfrac{(y-\mu)^2}{2\sigma^2} + \log\sigma$.
+  Gradient derived in \Cref{sec:heteroscedastic}. \texttt{probs}
+  returns $(\mu, \sigma)$.
+\end{itemize}
+
+Gradient-check residuals on a Tanh MLP (seed~42): MSE
+$2.3 \times 10^{-10}$, Poisson $9.6 \times 10^{-11}$, Gaussian
+$1.1 \times 10^{-10}$. All well below the $10^{-4}$ tolerance.
+
+Not in the library: Beta NLL and the MDN. Both are natural extensions
+(see \Cref{sec:link-likelihood,sec:mdn}), not missing infrastructure.
+Beta NLL needs only \texttt{math.lgamma}; the MDN composes existing
+primitives. They are the next things to build, not gaps.
 
 \section{Handoff}\label{sec:handoff}
 
-Placeholder.
+This chapter took up the output-head axis of inductive bias in full. The
+unifying frame: every supervised network is a maximum-likelihood
+estimator under an assumed output distribution. The canonical-link
+theorem (\Cref{thm:canonical-link}): with the canonical link, the
+gradient of the NLL is always $\hat{p} - y$. Three review pairings
+from Chapter~1 (Gaussian, Bernoulli, Categorical), now named as members
+of one family. Two new worked heads: Poisson for count data, and the
+heteroscedastic Gaussian for calibrated, input-dependent uncertainty.
+One example of link/likelihood independence (sigmoid plus Beta). A
+pointer to mixture density networks. And the parallel-axes synthesis
+showing how the architecture axis and the output-head axis compose.
+
+The architecture axis continues in the next chapter, on convolutional
+networks: the prior that nearby inputs matter together and the same
+feature detector should fire anywhere. After CNNs, the following
+chapters cover fixed-context language models, recurrent networks, and
+the Transformer, each encoding a different structural prior. Every
+architectural choice in those chapters composes freely with any of the
+output heads in this chapter: a language model is a Transformer body
+with a Categorical head over a vocabulary; pixel-wise depth estimation
+is a CNN body with a Gaussian head; photon-counting imaging is a CNN
+body with a Poisson head. The two axes multiply.
+
+The book closes with a chapter on reinforcement learning, where the
+training signal shifts from a per-example label to a scalar reward over
+whole trajectories. The heads-as-bias frame still applies there (a
+policy head is a softmax over actions; a value head is identity plus MSE
+on returns), but the supervised-learning frame, the frame this chapter
+closes, no longer holds. That shift is the genuinely different third
+learning paradigm.
