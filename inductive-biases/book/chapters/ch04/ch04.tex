@@ -1,0 +1,54 @@
+% DEFINED:   ch:fixed-context-lm
+% CONTAINS:  section/figure labels live in the \input'd files below
+%            (sec:bengio-arch, sec:embedding-layer, sec:bengio-bias,
+%            sec:bengio-training, sec:bengio-alice, fig:ch04-lm-loss,
+%            sec:window-limits, sec:bengio-map, sec:bengio-handoff)
+% RESOLVED:  ch:foundations, sec:mlp-backprop, sec:softmax, ch:cnn
+%            (all backward into Part I and earlier Part II)
+% CROSS-CHAPTER FORWARD (prose-only, no \Cref): Chapter 5 (the recurrent
+%            network, "the next chapter"), Chapter 6 (the Transformer).
+%            Neither is drafted yet; both stay prose.
+
+\chapter[Fixed-Context Language Models]{Fixed-Context Language Models}%
+\label{ch:fixed-context-lm}
+
+The convolutional network of \Cref{ch:cnn} committed to a prior over a
+plane: pixels have neighbors, and a feature is the same feature a few
+pixels over. Sequences ask the same question of a line. The recent past
+matters more than the distant past, and a pattern is the same pattern a
+few steps later. This chapter takes the architecture axis onto sequences
+with the simplest model that earns the name \emph{neural language model}:
+look at the last $N$ tokens, embed each one through a shared lookup table,
+concatenate the embeddings, and feed the result through a small multilayer
+perceptron that outputs a distribution over the next token. No recurrence,
+no attention, no machinery beyond the embedding lookup and an
+\Cref{ch:foundations} MLP. This is the architecture Bengio and
+collaborators introduced in \emph{A Neural Probabilistic Language Model}
+in 2003, and it was the dominant neural language model for several years
+before recurrent networks and then Transformers displaced it.
+
+Its prior is a single clean assumption: a bounded window suffices. The
+model conditions on exactly the last $N$ tokens and forgets everything
+older by construction. That is the Markov assumption of order $N$, made
+architectural rather than estimated from counts. The bet buys three
+things. Training is one MLP backward pass per example with no unrolling
+through time. Every window-target pair is independent, so there are no
+sequential dependencies to serialize. And there is no long product of
+Jacobians to shrink a gradient toward zero. What the bet gives up is the
+ability to use anything past $N$ tokens back. The next chapter loosens
+exactly that constraint by carrying a hidden state instead of a fixed
+window; this chapter is the fixed-window baseline that makes the
+comparison legible when it arrives.
+
+The plan is the usual one for Part~II. State the prior, build the
+smallest model that isolates it, read its real code, train it on a corpus
+small enough to watch, and locate it on the map of architectural priors.
+Everything here is pure-Python \texttt{scratchnn}: the model is a plain
+\texttt{Network}, and the experiment runs in the same training loop as
+every model before it.
+
+\input{chapters/ch04/01-arch-and-embedding}
+\input{chapters/ch04/02-biases-and-training}
+\input{chapters/ch04/03-alice-experiment}
+\input{chapters/ch04/04-limits-map-handoff}
+\input{chapters/ch04/bib-notes}
