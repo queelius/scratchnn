@@ -4,8 +4,109 @@
 
 \section{The architecture}\label{sec:bengio-arch}
 
-Placeholder.
+The model has three parts, and each one is a building block already in
+hand or close to it.
+
+First, an \textbf{embedding table} $E$ of shape $V \times d$, where $V$ is
+the vocabulary size and $d$ is the embedding dimension. Each token id $c$
+indexes a row $E_c$, a learned dense vector of length $d$. The rows are
+\emph{shared across positions}: the embedding of a token is the same
+vector whether the token appears first or last in the context window.
+
+Second, a \textbf{concatenation step}. Given a context of $N$ token ids
+$c_{t-N+1}, \ldots, c_t$, look up the $N$ embeddings and concatenate them
+into a single vector $\vx$ of length $Nd$. This vector carries two kinds
+of information at once: \emph{what} tokens are present, through the
+embeddings, and \emph{where} each one sits in the window, through its
+offset in the concatenation.
+
+Third, a \textbf{small multilayer perceptron} that maps $\vx$ to logits
+over the vocabulary,
+\[
+  \mathbf{h} = \tanh(W_1 \vx + \mathbf{b}_1), \qquad
+  \vz = W_2 \mathbf{h} + \mathbf{b}_2,
+\]
+exactly the head from \Cref{ch:foundations}. A softmax of $\vz$ is the
+predicted distribution over the next token, and
+\texttt{SoftmaxCrossEntropy} is the loss. The network emits logits; the
+loss interprets them, the same division of labor the whole book has kept.
+
+That is the entire model. In \texttt{scratchnn} it is a plain
+\texttt{Network} with no custom training loop:
+\begin{lstlisting}
+net = Network([
+    EmbedConcat(vocab_size, embed_dim, context_size),
+    Linear(context_size * embed_dim, hidden_size),
+    Tanh(),
+    Linear(hidden_size, vocab_size),
+], SoftmaxCrossEntropy())
+\end{lstlisting}
+The only new layer is \texttt{EmbedConcat}, which wraps the embedding
+lookup and the concatenation. Its forward takes a \texttt{list[int]} of
+length \texttt{context\_size} and returns a flat \texttt{list[float]} of
+length \texttt{context\_size * embed\_dim}. From the downstream layers'
+point of view the input is just a vector, so \texttt{Linear},
+\texttt{Tanh}, and \texttt{SoftmaxCrossEntropy} compose without change.
+Training is \texttt{net.fit(X, Y, ...)} where each \texttt{X[i]} is a
+context (a \texttt{list[int]}) and each \texttt{Y[i]} is the next token id.
 
 \section{The Embedding layer}\label{sec:embedding-layer}
 
-Placeholder.
+An \texttt{Embedding} maps a discrete token id to a dense vector. It is
+mathematically a \texttt{Linear} layer applied to a one-hot input, but it
+skips the multiply-by-zero by indexing the row directly. The forward
+returns a copy of the relevant row and records the id; the backward pops
+the id and accumulates the upstream gradient into that row. Here is the
+real layer from \texttt{scratchnn}, with the constructor trimmed:
+\begin{lstlisting}
+class Embedding(Layer):
+    def forward(self, token_id):
+        self.cache.append(token_id)
+        return list(self.weights[token_id])
+
+    def backward(self, grad):
+        token_id = self.cache.pop()
+        row = self.dweights[token_id]
+        for k in range(len(grad)):
+            row[k] += grad[k]
+        return None    # discrete input, no upstream gradient
+\end{lstlisting}
+The lookup view and the one-hot view are the same computation. Real
+frameworks (PyTorch's \texttt{nn.Embedding}, for one) implement the lookup
+form for efficiency; the math does not change. The weight table is exactly
+the matrix a \texttt{Linear} layer would hold for one-hot inputs.
+
+Because the same \texttt{Embedding} is called once per context position in
+a single forward pass, the layer keeps an internal LIFO cache of which ids
+were used. The \texttt{backward} pops the cache and accumulates each
+gradient into the matching row, the same \texttt{+=} accumulation pattern
+\texttt{Linear} uses in \Cref{sec:mlp-backprop}, here routed by token id
+rather than by neuron.
+
+\texttt{EmbedConcat} is the thin wrapper that turns $N$ token ids into the
+one flat vector the MLP head wants. Its forward embeds each id and
+concatenates; its backward slices the incoming gradient into $N$ chunks of
+length $d$ and routes each back in reverse, so the pops line up with the
+pushes:
+\begin{lstlisting}
+class EmbedConcat(Layer):
+    def forward(self, ids):           # ids: list[int] of length N
+        self.embed.reset_cache()
+        out = []
+        for token_id in ids:
+            out.extend(self.embed.forward(token_id))
+        return out                    # flat list, length N * d
+
+    def backward(self, g):
+        d = self.embed_dim
+        # Backward in reverse to match the embedding's LIFO cache.
+        for i in reversed(range(self.context_len)):
+            self.embed.backward(g[i * d:(i + 1) * d])
+        return None
+\end{lstlisting}
+The concatenation is the whole positional prior in one line of indexing:
+token $i$'s embedding always lands in slots $[id, (i+1)d)$, so the MLP head
+downstream can learn position-specific weights over those slots. The
+\texttt{parameters()} method delegates to the wrapped \texttt{Embedding},
+so the table is the only place the rows live, and the generic optimizer
+from \Cref{ch:foundations} steps them without knowing an embedding exists.
