@@ -1,6 +1,25 @@
 % DEFINED:   (no new labels)
-% RESOLVED:  cite keys (Task 7)
+% RESOLVED:  cite keys: fukushima1980, lecun1989, lecun1998, uci1998digits,
+%            goodfellow2016dlbook
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
-% TODO Task 7
+
+The idea of a shift-invariant network built from locally connected units with
+shared weights goes back to the neocognitron of \textcite{fukushima1980}, which
+already framed pattern recognition as something a network should do
+``unaffected by shift in position.'' The modern form, a convolutional network
+trained end to end by backpropagation, is due to \textcite{lecun1989}, who
+applied it to handwritten zip-code recognition. The fuller treatment, including
+the LeNet architecture and the gradient-based learning framework that became
+the template for the field, is \textcite{lecun1998}.
+
+The dataset used here is the UCI optical-recognition-of-handwritten-digits
+collection \parencite{uci1998digits}, the same $8 \times 8$ optdigits set as
+the Part~I experiments; its $8 \times 8$ images are the $4 \times 4$
+block-counted reduction of the original $32 \times 32$ NIST bitmaps, which is
+why the spatial structure is already partly summarized before any convolution
+sees it. For a textbook account of convolutional networks, including pooling,
+multi-layer stacks, and the receptive-field growth this chapter only points
+at, see the convolutional-networks chapter of
+\textcite{goodfellow2016dlbook}.
