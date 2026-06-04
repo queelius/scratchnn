@@ -1,0 +1,45 @@
+% DEFINED:   ch:cnn
+% CONTAINS:  section/equation/figure labels live in the \input'd files below
+%            (sec:conv-unit, sec:weight-sharing, sec:conv-params,
+%            sec:conv-forward, sec:conv-backward, eq:conv-grad,
+%            sec:conv-digits, sec:permuted-pixel, fig:permuted-pixel,
+%            sec:cnn-bias, sec:pure-python-boundary)
+% RESOLVED:  ch:foundations, sec:inductive-biases (backward into Part I)
+% CROSS-CHAPTER FORWARD (prose-only, no \Cref): Chapter 4 (sequences /
+%            the fixed-context language model), Chapter 6 (the Transformer,
+%            where pure Python ends)
+
+\chapter[Convolutional Networks]{Convolutional Networks: Locality and
+Translation Equivariance}%
+\label{ch:cnn}
+
+\Cref{ch:foundations} named two axes at which a prior enters a supervised
+model: the \textbf{output head}, which fixes what the raw output means,
+and the \textbf{architecture}, which fixes how the network computes its
+features. Part~I followed the output-head axis. Part~II follows the
+other one, and this chapter takes its first non-trivial step.
+
+The architecture is a prior over how features compose. A multilayer
+perceptron makes the weakest possible such commitment: every input
+coordinate may interact with every other on equal footing, and which
+interactions matter is left entirely to the data. That generality is a
+strength on tabular features with no inherent geometry. On an image it is
+a waste. Pixels are arranged in a plane, neighbors mean something,
+and a digit is the same digit a few pixels to the left. An MLP knows none
+of this; it has to relearn the plane from scratch every time.
+
+A convolutional network is what we build when we refuse to throw that
+structure away. It bakes two assumptions into the operator itself rather
+than leaving them to be learned. \textbf{Locality}: a unit reads a small
+neighborhood, not the whole input. \textbf{Translation equivariance}: the
+same unit is applied at every position, so a feature detected in one place
+is detected everywhere. The whole chapter is the unpacking of that one
+move, in math, in code, and in a falsification experiment. It closes by
+marking a boundary: the convolution is the last large layer this book
+writes in pure Python.
+
+\input{chapters/ch03/01-conv-and-sharing}
+\input{chapters/ch03/02-conv-code}
+\input{chapters/ch03/03-digits-and-control}
+\input{chapters/ch03/04-bias-and-boundary}
+\input{chapters/ch03/bib-notes}

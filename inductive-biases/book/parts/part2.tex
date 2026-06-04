@@ -1,0 +1,15 @@
+\part{Architectural Inductive Biases}
+
+If the output head is a prior over the response, the architecture is a
+prior over how features compose. Part~II takes the major families one at
+a time and names the structural assumption each one bakes in.
+Convolutional networks assume locality and translation equivariance
+(Chapter~3). Fixed-context language models assume a bounded window
+suffices (Chapter~4). Recurrent networks assume time-translation
+equivariance and squeeze the past through a state bottleneck (Chapter~5).
+Transformers assume nothing about which positions matter and instead
+learn a content-addressable lookup, on the fly, position by position
+(Chapter~6). Each chapter states the prior, builds a model small enough
+to test it, and checks whether the assumption holds.
+
+\input{chapters/ch03/ch03}
