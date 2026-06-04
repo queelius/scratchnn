@@ -584,7 +584,7 @@ print("Experiment 2 (multi-hop lookup, M=8):")
 print(f"  Transformer (2L,1H) acc = {exp2['2L']:.3f}")
 print(f"  Transformer (3L,1H) acc = {exp2['3L']:.3f}")
 print()
-print("Scaling sweep (single lookup, sinusoidal PE, 3000 iters):")
+print("Scaling sweep (single lookup, sinusoidal PE, 6000 iters):")
 for r in sweep:
     print(f"  M={r['M']:>2}  MLP={r['mlp_acc']:.3f}  Transformer={r['xf_acc']:.3f}")
 print()
