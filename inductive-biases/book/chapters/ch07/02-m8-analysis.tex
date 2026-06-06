@@ -4,6 +4,189 @@
 
 \section{Layer 2 attends to the addressed position}\label{sec:layer2-deref}
 
+Start with the dereference, the second half of the hypothesis, because it is the
+easiest to see. Take four representative test examples with addresses
+$a \in \{0, 4, 5, 7\}$ and extract the layer-2 attention pattern. The row that
+matters is row 10, the query at the last input position. Its argmax, the memory
+position receiving the most attention, lands exactly on the address every time:
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+Address $a$ & Layer-2 argmax position & Weight on that position \\
+\midrule
+0 & 0 & 0.698 \\
+4 & 4 & 0.973 \\
+5 & 5 & 0.881 \\
+7 & 7 & 0.851 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Every example sends most of position 10's layer-2 attention to the memory
+position whose index equals the address. The left panel of
+\Cref{fig:attn-contrast} shows one such map: for $a = 4$ the attention mass at
+the last query row concentrates almost entirely on column 4, the cell $m_4$.
+
+Four hand-picked examples could be a coincidence, so aggregate. The probe runs
+the layer-2 attention for many examples, takes the last row of each, and groups
+those rows by the decoded address:
+
+\begin{lstlisting}
+def aggregate_last_row(model, X, M=8, A=3):
+    """Layer-2 attention from the last position, grouped by address."""
+    T = M + A
+    by_addr = {a: [] for a in range(2 ** A)}
+    for ids in X:
+        ctx = ids[:T]
+        a = address_value(ctx, M=M, A=A)
+        attn_L2 = model.attention_at(ctx, layer=1, head=0)
+        last_row = attn_L2[T - 1]
+        by_addr[a].append(last_row)
+    means = {a: np.mean(np.stack(v), axis=0) for a, v in by_addr.items() if v}
+    return means
+\end{lstlisting}
+
+Averaged over 500 test examples, partitioned by encoded address, the picture is
+clean for every address, not just the four:
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+Address $a$ & Avg weight on $m_a$ & Avg weight on other memory \\
+\midrule
+0 & 0.795 & 0.205 \\
+1 & 0.706 & 0.294 \\
+2 & 0.661 & 0.339 \\
+3 & 0.708 & 0.252 \\
+4 & 0.812 & 0.188 \\
+5 & 0.710 & 0.286 \\
+6 & 0.729 & 0.269 \\
+7 & 0.676 & 0.315 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For every address from 0 to 7, the average weight on the correct memory cell
+$m_a$ is between 0.66 and 0.81, and the combined weight on all other memory cells
+is only 0.19 to 0.34. The mapping from address to attended position is clean and
+consistent across the test distribution. Layer 2 is the dereference, exactly as
+predicted.
+
 \section{Layer 1 is the address aggregator}\label{sec:layer1-aggregator}
 
+Now the other half: layer 1 should be gathering the address bits into position
+10 so that layer 2's query can use them. For the same four examples, here is
+where layer 1 at position 10 sends its attention. The table gives the top three
+attended positions with weights, and the total mass on the address positions
+$\{8, 9, 10\}$ against the memory positions $\{0, \ldots, 7\}$:
+
+\begin{center}
+\begin{tabular}{@{}rlrr@{}}
+\toprule
+Address $a$ & Top-3 (position, weight) & Total on addr & Total on memory \\
+\midrule
+0 & (8, 0.49), (9, 0.41), (10, 0.05) & 0.956 & 0.044 \\
+4 & (8, 0.71), (9, 0.20), (7, 0.06) & 0.935 & 0.065 \\
+5 & (8, 0.73), (9, 0.19), (10, 0.06) & 0.986 & 0.014 \\
+7 & (8, 0.51), (9, 0.41), (10, 0.04) & 0.965 & 0.035 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The pattern is unambiguous. Layer 1 at position 10 puts 93 to 99 percent of its
+attention mass on the three address positions. The memory bits, which dominate
+the information content of the input by a factor of eight to three, receive
+almost none.
+
+There is a subtler thing in the table worth pausing on. Within the address
+positions the weights are not uniform. Position 8, the most significant bit
+$a_0$, gets the most weight; position 9, $a_1$, less; position 10, the least
+significant bit $a_2$, the least. This is sensible rather than incidental. The
+most significant bit partitions memory into upper and lower halves, the next bit
+selects quadrants, and the least significant bit selects within pairs. A model
+that has to write the whole address into a single residual vector through a
+linear value map will weight its inputs by how much they matter for the
+downstream lookup, and the most significant bit matters most for telling apart
+memory positions that are far apart. The hypothesis is vindicated on this side
+too: layer 1 is gathering the address, by exactly the
+attention-as-content-addressable-lookup mechanism of \Cref{ch:transformer}, with
+the position-10 query learning to match the position embeddings of 8 and 9.
+
 \section{Causal confirmation: ablations}\label{sec:ablations}
+
+Everything so far is correlational. We have seen that layer 1 attends to the
+address positions and layer 2 attends to the correct memory cell, which is
+consistent with the circuit hypothesis. It does not by itself rule out a duller
+story: that the model leans mostly on position 10's own embedding plus the bias
+structure of the data, with attention going along for the ride. To separate the
+two we need a causal test.
+
+The cleanest one is to replace a layer's attention pattern with the
+uniform-on-causal-prefix distribution, in which each query position attends with
+equal weight to every position at or before it, and then rerun the rest of the
+forward pass. This wipes out the layer's content-addressable behavior while
+leaving its value and feed-forward machinery untouched. If a layer is doing real
+work, the substitution should hurt. The same routine also supports a second
+intervention: shuffle the three address bits before the forward pass, which
+leaves the bit \emph{set} unchanged but destroys which bit is which.
+
+\begin{lstlisting}
+def ablation_shuffle_address(model, X, Y, M=8, A=3, seed=0):
+    """Permute the address bits across each example before forward."""
+    rng = np.random.default_rng(seed)
+    correct = 0
+    T = M + A
+    for ids, y in zip(X, Y):
+        ctx = ids[:T].copy()
+        addr = ctx[M:M + A].copy()
+        rng.shuffle(addr)
+        ctx[M:M + A] = addr
+        logits = model.forward(ctx)
+        pred = int(np.argmax(logits[-1]))
+        if pred == int(y):
+            correct += 1
+    return correct / len(X)
+\end{lstlisting}
+
+The uniform-prefix substitution is built the same way one would expect, by
+replacing the cached pattern with a normalized lower-triangular matrix before
+the value-weighted sum:
+
+\begin{lstlisting}
+uniform = np.tril(np.ones((T, T), dtype=np.float32))
+uniform = uniform / uniform.sum(axis=-1, keepdims=True)
+\end{lstlisting}
+
+On 500 test examples:
+
+\begin{center}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Intervention & Test accuracy \\
+\midrule
+Baseline (no intervention) & 1.000 \\
+Layer 1 attention $\to$ uniform & 0.658 \\
+Layer 2 attention $\to$ uniform & 0.636 \\
+Shuffle the three address bits before forward & 0.776 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both layer ablations drop accuracy by a third. Either layer is necessary,
+neither alone is sufficient, and both have to be doing the hypothesized job.
+That is the causal confirmation the correlational evidence could not give on its
+own.
+
+The shuffle ablation is the most instructive of the three. Permuting the address
+bits keeps the same multiset of bits but destroys the positional encoding of
+which bit is which. If the model depended only on whether each address bit was 0
+or 1, a permutation-invariant function of the bits, the shuffle would not hurt.
+The drop from 1.000 to 0.776 says the model is using the bits with their
+positional roles, exactly as a circuit computing $a = 4 a_0 + 2 a_1 + a_2$ must.
+And the fact that accuracy lands at 0.776 rather than at chance is itself
+informative. The memory bits are still present, so when many of them happen to
+agree the prediction is right regardless of which cell is addressed. The residual
+0.776 is the "guess the majority bit" baseline given a scrambled address, and the
+0.224 gap below the baseline is the attributable contribution of correctly routed
+addressing.
