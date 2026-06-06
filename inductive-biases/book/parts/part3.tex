@@ -1,0 +1,18 @@
+\part{Interpretation and Beyond}
+
+The first two parts ask what bias to build in. Part~III asks what the
+network did with it, and then leaves supervised learning behind.
+Chapter~7 takes the trained pointer transformer apart and finds that
+having the right architecture is necessary but not sufficient: a third
+axis, implementation realization, governs whether gradient descent
+finds the bias-permitted solution and whether we can read it back off
+the weights. The answer there is a cautionary one about the limits of
+staring at attention maps and the power of causal probes, and it is the
+book's flagship honest-empiricism result. Chapter~8 then changes the
+learning signal entirely, trading per-example labels for a scalar
+reward over whole trajectories, and asks how much of the
+inductive-bias frame survives the move to reinforcement learning. It is
+the book's last chapter, and its closing section is the book's
+conclusion.
+
+\input{chapters/ch07/ch07}

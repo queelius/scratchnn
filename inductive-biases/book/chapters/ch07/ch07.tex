@@ -1,0 +1,75 @@
+% DEFINED:   ch:interpretability
+% CONTAINS:  section/figure labels live in the \input'd files below
+%            (sec:interp-setup, sec:circuit-restated, sec:layer2-deref,
+%            sec:layer1-aggregator, sec:ablations, sec:induction-head,
+%            sec:icl, sec:small-model-limits, sec:scaling-the-lens,
+%            fig:attn-contrast, fig:lookup-by-address, fig:causal-trace,
+%            sec:interp-closing)
+% RESOLVED:  ch:transformer, sec:one-layer-limit, sec:pe-scale-fix,
+%            sec:parallel-axes, sec:three-axes (all backward into Parts I-II)
+% CROSS-CHAPTER FORWARD (prose-only, no \Cref): Chapter 8 (reinforcement
+%            learning; the closing chapter). Not drafted yet; stays prose.
+
+\chapter[Reverse-Engineering the Pointer Transformer]{Reverse-Engineering
+the Pointer Transformer}%
+\label{ch:interpretability}
+
+\Cref{ch:transformer} built a two-layer, one-head transformer that solves
+the pointer-dereferencing task at $M = 8$ to 100 percent test accuracy. We
+argued from the architecture (\Cref{sec:one-layer-limit}) that the model
+\emph{must} be composing two attention lookups: the first layer aggregates
+the address bits at the last input position, and the second layer uses the
+assembled address to attend to the addressed memory bit. That argument was a
+prediction. This chapter checks it against the trained weights.
+
+That is the whole move of Part~III. The first two parts decided what bias to
+build in. This chapter turns the lens around and reads the bias back out of
+a model that has already learned. It is the empirical payoff of the book's
+third axis, implementation realization: once gradient descent has run, which
+of the architecturally permitted solutions did it actually find, and can we
+recover that solution from the weights?
+
+The $M = 8$ model is small enough to answer cleanly. It has 17{,}282
+parameters and the task has $2^{11} = 2048$ possible inputs, so we can
+describe what every component does and do it from the trained weights and
+attention patterns directly. That is mechanistic interpretability at its
+cleanest: a task with known structure, a model that solves it, and a
+hypothesis specific enough to falsify. The first eight sections carry out
+that dissection and find the predicted circuit, confirmed by ablations. They
+also place the circuit in the literature, as a near-cousin of the induction
+head and a minimal instance of the mechanism behind in-context learning.
+
+Then the chapter does the part it did not set out to do. The same task at
+$M = 32$ needs a third layer, and when we point the same tools at a model
+that solves it, the clean circuit is gone. The attention maps look
+illegible, and two hypotheses written before the analysis are refuted by the
+data. A causal probe then shows that the model is nonetheless a perfect
+pointer, and a causal trace recovers a mechanism as clean as the $M = 8$
+one, a mechanism the attention maps simply could not surface. The lesson in
+one sentence: attention weight is not information flow, and the tool, not
+the model, decides what is legible. This is the book's flagship
+honest-empiricism result, and it is the largest single section in the book.
+
+A word on what is being dissected, because the chapter studies two distinct
+models in two frameworks and the distinction matters. Sections 1 through 8
+analyze the from-scratch NumPy model of \Cref{ch:transformer}: two layers,
+one head, $d_{\text{model}} = 32$, the file
+\texttt{examples/pointer\_interp.py}. It retrains cheaply on each run, so its
+exact weights move a little between runs while the circuit it learns does
+not. Section 9 analyzes a separately trained, deliberately introspectable
+PyTorch model: three layers, four heads, $d_{\text{model}} = 128$, attention
+written out by hand so every pattern is readable, the file
+\texttt{examples/pytorch/pointer\_interp\_deep.py}. This is \emph{not} the
+Chapter~6 scaling-sweep model, which used a library attention layer; it is a
+fresh model built to be read, loaded from a committed checkpoint so its
+numbers are fixed. The two models solve the same kind of task at different
+scales, but their accuracies are not comparable across the framework
+boundary, and the chapter never compares them as numbers. What carries
+across is the method and the lesson.
+
+\input{chapters/ch07/01-setup-and-circuit}
+\input{chapters/ch07/02-m8-analysis}
+\input{chapters/ch07/03-induction-and-icl}
+\input{chapters/ch07/04-scaling-the-lens}
+\input{chapters/ch07/05-closing}
+\input{chapters/ch07/bib-notes}
