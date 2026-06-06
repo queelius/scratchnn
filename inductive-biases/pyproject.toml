@@ -8,9 +8,27 @@ dependencies = [
     "numpy",
     "matplotlib",
     "scikit-learn",
+    # torch is a notebook-only dependency, needed solely for Chapter 7's M=32
+    # probes (it loads examples/pytorch/interp_deep_M32.pt and runs the causal
+    # flip test, per-layer ablations, and activation-patching causal trace; no
+    # training). A CPU build is sufficient: the checkpoint loads and the probes
+    # run in seconds. The M=8 act (Chapter 7 sections 1 to 8) is NumPy and does
+    # not need torch. See docs/superpowers/specs/2026-06-04-part3-design.md,
+    # decision C.
+    "torch",
 ]
 
 # The book's pure-Python library lives in the parent repo; install it editable
 # for use in notebooks with:  uv pip install -e ../..
 [tool.uv]
 package = false
+
+# Pin torch to a CPU wheel: the notebook does inference on a committed
+# checkpoint, so no CUDA is needed, and the CPU index keeps the install light.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
