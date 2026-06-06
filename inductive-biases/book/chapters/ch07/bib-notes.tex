@@ -4,3 +4,24 @@
 % FORWARD:   (none)
 
 \section*{Bibliographic Notes}
+
+The circuit reading in this chapter follows the transformer-circuits line of
+work. \textcite{elhage2021framework} sets out the framework for reading
+attention transformers as compositions of QK and OV circuits, the decomposition
+used throughout \Cref{sec:induction-head} to compare the pointer-lookup head to
+the induction head. \textcite{olsson2022induction} identifies induction heads and
+ties their emergence during pretraining to the emergence of in-context learning,
+the connection \Cref{sec:icl} builds on. The pointer-dereference circuit dissected
+here is a deliberately minimal cousin of those mechanisms, the same
+content-addressable primitive turned on a purer memory-addressing task.
+
+The causal interventions of \Cref{sec:scaling-the-lens} are the methodological
+core of modern mechanistic interpretability. \textcite{wang2022wild} works out a
+full circuit for indirect-object identification in a real language model using
+activation and path patching, and makes the case that attention-pattern reading
+is too weak an instrument once a computation distributes across heads and layers.
+The activation-patching causal trace used on the $M = 32$ model, patching a clean
+residual into a corrupted run and measuring recovery, is the technique
+\textcite{meng2022rome} introduced for locating where a fact is stored in a
+transformer; the same minimal-pair idea is what \Cref{fig:causal-trace} applies to
+locate where the addressed bit is carried.
