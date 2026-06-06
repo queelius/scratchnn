@@ -4,4 +4,69 @@
 
 \section{The setup}\label{sec:interp-setup}
 
+The model under the lens is the one \Cref{ch:transformer} trained: a two-layer,
+one-head decoder transformer with $d_{\text{model}} = 32$ and
+$d_{\text{ff}} = 64$, trained for 2000 iterations with Adam at learning rate
+$10^{-3}$, batch size 32, on 20{,}000 examples of the $M = 8$, $A = 3$ pointer
+task. On 2000 held-out examples it reaches a test accuracy of 1.000. It has
+17{,}282 parameters, and the task has only $2^{11} = 2048$ possible inputs. That
+combination is what makes the dissection clean. The model solves the task
+perfectly, and the task is small enough that we can describe what every
+component does and do it from the trained weights and attention patterns
+directly.
+
+Each input is an eleven-token sequence: eight memory bits, then three address
+bits, most significant first. The supervised target at position 10, the last
+input position, is the value at memory position $a$, where $a$ is the integer
+decoded from the three address bits. The plan for the chapter is to read the
+architectural prediction of \Cref{ch:transformer} off these trained weights and
+check, component by component, whether the model does what the architecture said
+it must.
+
+The instrument is the attention pattern itself. Both layers cache their
+forward-pass attention matrix, and the model exposes a method that returns the
+$(T, T)$ attention pattern for any single layer and head. We call it to extract
+the pattern for a given input, and we average it across the test set to ask what
+the model does in general rather than on one example. All of the code for this
+analysis is in \texttt{examples/pointer\_interp.py}.
+
 \section{What the circuit must be}\label{sec:circuit-restated}
+
+Before looking at a single weight, it is worth restating what the model
+\emph{has} to be doing, because the architectural argument of
+\Cref{sec:one-layer-limit} is specific enough to pin the circuit down to one
+possibility.
+
+The model produces its prediction by passing the residual stream at position 10
+through the final layer norm and an output head. Whatever the model knows about
+the answer has to be present in that residual stream at position 10 after the
+second layer. Now trace backward. Before any attention runs, position 10's
+residual is the embedding of token $a_2$, the address least significant bit,
+plus the positional encoding for position 10. It carries no information about
+$a_0$ or $a_1$, which live in positions 8 and 9. Yet the answer depends on the
+full address $a = 4 a_0 + 2 a_1 + a_2$. So for the second layer's query at
+position 10 to attend to memory position $a$, that query must already depend on
+all three address bits, which means the first layer must have moved $a_0$ and
+$a_1$ into position 10's residual. The only mechanism a self-attention layer has
+for that is attention from position 10 back to positions 8 and 9.
+
+The hypothesis is therefore forced:
+
+\begin{quote}
+\textbf{Layer 1}, at position 10, attends to positions 8, 9, and 10, the three
+address positions, and assembles them into position 10's residual.
+
+\textbf{Layer 2}, at position 10, uses the assembled address to attend to memory
+position $a$ and copy its value into the readout.
+\end{quote}
+
+This is the \emph{only} way a two-layer, one-head transformer can solve the task.
+The claim is genuinely falsifiable. If the trained model is doing something else,
+the architectural argument of \Cref{ch:transformer} was wrong. If it is doing
+exactly this, the argument is empirically vindicated. The next three sections
+check each half against the weights and then confirm the whole causally.
+
+A note on scope before we begin. The model dissected here, and through the
+induction-head and in-context-learning discussion that follows, is this
+from-scratch NumPy model at $M = 8$. The final section turns the same tools on a
+larger PyTorch model at $M = 32$, where the answer is more surprising.
