@@ -4,6 +4,152 @@
 
 \section{Is this an induction head?}\label{sec:induction-head}
 
+The circuit we just read out is worth placing in the wider interpretability
+literature, because it is a near-cousin of the most studied small circuit in
+transformers: the induction head. The pattern our model implements is not the
+canonical induction-head pattern, but it is the same \emph{primitive} deployed
+for a different purpose, and the distinction is exactly what makes the comparison
+useful.
+
+The induction head, from Olsson and colleagues, is a two-head, two-layer circuit
+that implements the rule
+\[
+\ldots \; A \; B \; \ldots \; A \; \to \; B,
+\]
+that is, on seeing token $A$ again, predict whatever followed the previous
+occurrence of $A$. It decomposes into two pieces. A \textbf{previous-token head}
+in the first layer makes every position $t$ copy the embedding of token $t - 1$
+into its residual, so that position $t$ ends up encoding "I am here, preceded by
+token $X$." An \textbf{induction head} in the second layer then queries, from
+position $t$, against earlier positions using that previous-token-shifted
+signature, finds the position $i$ where the preceding token matched the current
+token, and copies what was at position $i$, which is "the thing that followed the
+last $A$."
+
+The transformer-circuits framework of Elhage and colleagues decomposes any such
+head into a \textbf{QK circuit}, which determines where the attention spike lands
+from the query-key product, and an \textbf{OV circuit}, which determines what
+value gets copied once the spike is located. The induction head's QK circuit
+matches on previous-token-shifted features; its OV circuit copies the value at
+the matched position into the residual stream. Our pointer circuit fits the same
+frame exactly, just with different content:
+
+\begin{center}
+\begin{tabular}{@{}p{0.3\linewidth}p{0.3\linewidth}p{0.3\linewidth}@{}}
+\toprule
+ & Induction head & Pointer dereference (ours) \\
+\midrule
+What layer 1 writes into the residual & The previous token's identity, shifted one position & The address bits, gathered from positions 8 and 9 (and 10) into position 10 \\[1ex]
+What layer 2's QK matches on & Previous-token signatures, seeking prior occurrences of the current token & The encoded address, seeking the memory position whose positional encoding matches \\[1ex]
+What layer 2's OV copies & The token value at the matched position & The memory bit at the matched position \\[1ex]
+Domain & Token identities and sequences of them & Positional encodings and an address \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both are two-layer compositions of content-addressable lookups, and the
+\emph{mechanism} is identical: attention as soft retrieval, with the query
+learning to match the right key. Only the \emph{content} differs, token
+identities for the induction head against positional addresses for ours. So the
+answer to "is it an induction head?" is: structurally yes, literally no. It is
+what one might call the address-lookup head, the same primitive in the same
+shape, turned on the purer content-addressable-memory task. Induction heads are
+the version of this circuit that the statistics of natural language ask for;
+ours is the version a memory-addressing task asks for.
+
 \section{In-context learning is content-addressable lookup, composed}\label{sec:icl}
 
+The reason the induction head matters beyond its own neatness is its connection
+to \textbf{in-context learning}: the ability of a trained language model to use
+information in its prompt, with no weight update, to inform predictions on a task
+specified in that prompt. Show a model the prompt
+
+\begin{verbatim}
+zarp -> bumi
+flom -> bumi
+trel -> tev
+clok -> tev
+zarp -> ?
+\end{verbatim}
+
+and it will often emit \texttt{bumi}. The model has, in context, learned a
+mapping from a single example with no gradient step. That capability is much of
+what separates large language models from the older sequence models, and it is
+the substance of the in-context-learning literature.
+
+Olsson and colleagues argue that induction heads are a \emph{mechanistic}
+substrate for this ability: a circuit that finds prior occurrences of the current
+token and copies the following value is precisely what one-shot
+retrieval-from-context needs. Empirically, the emergence of induction heads
+during pretraining coincides with the emergence of measurable in-context-learning
+ability.
+
+Our pointer-lookup circuit is in the same family. Read the pointer task as a
+one-shot in-context-learning problem. The \textbf{context} is an eight-bit memory
+and a three-bit address. The \textbf{task specification} is implicit: at this
+position, retrieve memory bit $a$. The \textbf{completion} is the value at the
+addressed cell. The model was never trained on the specific eleven-bit sequence
+it sees at inference time, and most of the twenty thousand training examples
+never reappear; it solves each new example using the in-context memory and
+address, exactly as an in-context-learning system would. It just happens to do so
+by positional-address matching rather than by token-pattern matching, which is
+the same primitive applied to a slightly cleaner data-generating process.
+
+This is the broader picture worth carrying away. In-context learning is what a
+transformer does when its content-addressable lookup primitive is composed over
+enough tokens, heads, and layers to encode arbitrary soft retrieval queries.
+Induction heads are one well-studied two-layer instance of that primitive, and
+our pointer circuit is another. A trained language model has thousands of
+attention heads across dozens of layers, each implementing some specialized
+lookup, and in-context learning is the emergent property of running them all
+together on a context-dependent task.
+
+Looking back at the inductive-bias frame, this sharpens what a transformer's
+architectural commitment actually is. It is not just "attention." It is
+specifically content-addressable retrieval as a composable primitive. Depth is
+how many composed retrievals the model can chain. Width, the multi-head axis of
+\Cref{sec:parallel-axes}, is how many parallel retrievals it runs per layer.
+In-context learning emerges where depth and width are large enough that the
+composed retrievals can express arbitrary soft programs over the context.
+
 \section{What this small model leaves out}\label{sec:small-model-limits}
+
+A word of honesty about scale before we test that claim. The model interpreted
+here is two layers, one head, eleven tokens of context, a two-token vocabulary,
+and the circuit is correspondingly minimal. Three things a full interpretability
+analysis on a larger model would also have to cover are worth naming, both to be
+candid and because the last section runs into the third of them head-on.
+
+\begin{itemize}
+\item \textbf{Value circuits and embedding geometry.} We have not opened up the
+embedding vectors for tokens 0 and 1 or the positional encodings. With a
+two-token vocabulary the embedding has only two rows to inspect, but how
+\emph{value} information flows through the OV path of each layer is genuinely
+interesting at scale, and we leave it closed here.
+
+\item \textbf{Multi-head specialization.} Real transformers have many heads per
+layer, each potentially a different lookup. A character-level language model
+trained on prose, for instance, develops heads that attend to the previous space,
+heads that attend to the start of the current word, heads that attend to repeated
+characters, each a small specialized lookup that together enable rich behavior.
+Our one-head model has none of this structure to find. (An archived
+character-level experiment in the repository,
+\texttt{docs/series/archive/transformer-text.md}, visualizes exactly these
+per-head patterns for readers who want to see specialization in the wild.)
+
+\item \textbf{Activation patching.} The ablations here zero out an attention
+layer wholesale. A finer tool is to \emph{patch} an activation from one input
+into another: copy a residual at one layer and position from one run into another
+and watch whether the output flips. This isolates the causal role of each
+component on each example, and it is the basis for most published mechanistic
+results on language models. The final section leans on exactly this tool, and it
+turns out to be the difference between seeing the mechanism and not.
+\end{itemize}
+
+The pedagogical point is that the technique applied in this chapter, state a
+circuit hypothesis from the architectural argument and verify it with attention
+extraction plus ablation, is the same technique used at scale, only with more
+components and sharper intervention tools. The next section puts that to the
+test. It takes the \emph{same task} at $M = 32$, where \Cref{ch:transformer}
+found a third layer is required, and asks whether the clean circuit survives the
+scale-up.
