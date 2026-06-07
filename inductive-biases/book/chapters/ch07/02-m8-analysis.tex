@@ -28,9 +28,11 @@ position whose index equals the address. The left panel of
 \Cref{fig:attn-contrast} shows one such map: for $a = 4$ the attention mass at
 the last query row concentrates almost entirely on column 4, the cell $m_4$.
 
-Four hand-picked examples could be a coincidence, so aggregate. The probe runs
-the layer-2 attention for many examples, takes the last row of each, and groups
-those rows by the decoded address:
+Four hand-picked examples could be a coincidence, so aggregate. (The paired
+notebook caches the $a = 4$ row; the other three weights above are illustrative
+values from the same seed-0 run. The aggregate that follows is computed and
+stored in the notebook.) The probe runs the layer-2 attention for many examples,
+takes the last row of each, and groups those rows by the decoded address:
 
 \begin{lstlisting}
 def aggregate_last_row(model, X, M=8, A=3):
@@ -102,7 +104,7 @@ almost none.
 There is a subtler thing in the table worth pausing on. Within the address
 positions the weights are not uniform. Position 8, the most significant bit
 $a_0$, gets the most weight; position 9, $a_1$, less; position 10, the least
-significant bit $a_2$, the least. This is sensible rather than incidental. The
+significant bit $a_2$, the least. In the seed-0 run shown here this ordering is sensible rather than incidental, and while the exact weights move between retrains, the bias toward the more significant bits is the stable part. The
 most significant bit partitions memory into upper and lower halves, the next bit
 selects quadrants, and the least significant bit selects within pairs. A model
 that has to write the whole address into a single residual vector through a

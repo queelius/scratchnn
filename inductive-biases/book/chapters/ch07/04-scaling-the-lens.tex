@@ -8,8 +8,9 @@ attention hides the circuit, causal tracing reveals it}\label{sec:scaling-the-le
 
 Everything so far was the $M = 8$ model: eleven tokens, two layers, one head, a
 circuit clean enough to read off the attention maps. \Cref{ch:transformer} found
-that the same task at $M = 32$ needs a \emph{third} layer, since two layers
-cannot solve it at any width or training budget. We now have a full set of
+that the same task at $M = 32$ needs a \emph{third} layer: in the controlled
+comparison there, depth solved the task where neither width nor a longer training
+budget did. We now have a full set of
 dissection tools. The natural question is whether they reveal the same clean
 circuit, just scaled up. The attention maps say no. A causal trace says yes. The
 gap between those two answers is the most important lesson in this chapter.
@@ -96,12 +97,16 @@ one.
 \subsection*{Mechanically, the clean circuit is gone}
 
 Now read the attention, hoping for the $M = 8$ story scaled up: an aggregation
-layer and a single lookup head spiking on $m_a$. Averaged over the test set, the
-last-position query spreads its weight across layers like this. Layers 1 and 2
-both attend overwhelmingly to the address positions, 0.51 and 0.67 of their
-weight, not to memory. So the extra depth went into a \emph{two-stage} address
-aggregation: where $M = 8$ assembled its three-bit address in one layer, the
-$M = 32$ model spreads the five-bit assembly across layers 1 and 2. The
+layer and a single lookup head spiking on $m_a$. Averaged over the test set,
+layers 1 and 2 both attend overwhelmingly to the address positions, 0.51 and
+0.67 of their weight, not to memory. This model distributes the address
+aggregation across both of its lower layers, where the $M = 8$ model used a
+single one. That is a fact about how this trained network used the depth it has,
+not a claim that the wider address \emph{required} the extra layer:
+\Cref{ch:transformer} was careful on exactly that point, since $M = 24$ has the
+same five-bit address as $M = 32$ yet two layers suffice for it, so what makes
+the third layer necessary is the precision of the one-of-$M$ selection, not the
+width of the address decode. The
 dereference weight, the mass landing on the addressed cell, rises across layers,
 0.016 then 0.047 then 0.080, and is largest in layer 3. So far this is
 consistent with "layers 1 and 2 aggregate, layer 3 dereferences."
@@ -144,8 +149,10 @@ head.}
 
 The per-layer ablations, replacing one layer's attention with uniform and
 remeasuring, confirm the load-bearing structure without identifying any clean
-lookup. Baseline accuracy is 0.9975; sending layer 1's attention to uniform drops
-it to 0.540, layer 2 to 0.763, and layer 3 to 0.600. Layers 1 and 3 are
+lookup. Baseline accuracy on this harness's example subset is 0.9975, a shade
+above the 0.9965 full-test figure quoted earlier and measured on a different
+slice; sending layer 1's attention to uniform drops it to 0.540, layer 2 to
+0.762, and layer 3 to 0.600. Layers 1 and 3 are
 essential, layer 2 is auxiliary. But "layer 3 is essential" together with "layer
 3 has no clean lookup head for most addresses" is a genuine puzzle.
 
@@ -201,8 +208,12 @@ the clean answer:
 \qquad
 \Delta = \text{logit}[\text{answer}] - \text{logit}[\text{other}].
 \]
-Recovery near 1 marks a position that \emph{carries} $m_a$; near 0 marks one that
-does not. The inner loop is short:
+The margin $\Delta$ compares the output bit that is correct on the clean input,
+\emph{answer}, against its complement, \emph{other}; the three subscripted
+margins are that same quantity on the clean run, on the corrupted run, and on the
+corrupted run after a single residual is patched. Recovery near 1 marks a
+position that \emph{carries} $m_a$, since patching it back restores the clean
+margin; near 0 marks one that does not. The inner loop is short:
 
 \begin{lstlisting}
 for L in range(n_layers + 1):
