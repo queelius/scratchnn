@@ -1,10 +1,118 @@
 % DEFINED:   sec:aixi, sec:rl-axis
-% RESOLVED:  ch:fixed-context-lm, ch:cnn, ch:rnn, ch:transformer,
-%            ch:output-heads
+% RESOLVED:  ch:fixed-context-lm (the Solomonoff north star), ch:cnn, ch:rnn,
+%            ch:transformer (architecture axis as policy-architecture choices),
+%            ch:output-heads (heads-as-bias: policy = softmax, value = MSE)
 % FORWARD:   (none)
 
 \section{AIXI: the theoretical north star}\label{sec:aixi}
-Placeholder.
+
+Solomonoff induction, the ideal that framed \Cref{ch:fixed-context-lm}, is the
+optimal incomputable \emph{predictor}: a Bayesian mixture over all computable
+environments, each weighted by its program length under a universal prior. It
+is what an idealized agent would do if it could enumerate every Turing
+machine, score each by how well it explains the observations seen so far, and
+weight its predictions by the prior times the likelihood. Practical language
+models, the fixed-context network of \Cref{ch:fixed-context-lm} among them, are
+computable approximations to that ideal.
+
+\textbf{AIXI} (Hutter, 2000) is its action-taking sibling. Where Solomonoff
+predicts, AIXI \emph{acts}. At each step $t$ with interaction history
+$h_{<t}$, AIXI selects
+\[
+  a_t^{*} = \arg\max_{a_t} \sum_{o_t r_t}
+            \xi(o_t r_t \mid h_{<t}\, a_t)\,
+            V^{*}(h_{<t}\, a_t\, o_t\, r_t),
+\]
+where $\xi$ is the Solomonoff prior over environments (a mixture over all
+programs that could have generated the observed history), $o_t$ is the next
+observation, $r_t$ the next reward, and $V^{*}$ the optimal value function
+under that prior, defined by the same recursion. Decoded: AIXI maintains a
+posterior over every environment consistent with what it has seen, and at each
+step takes the action whose expected future discounted reward, averaged over
+that posterior, is highest. The expectation runs over the infinite-horizon
+trajectory under the optimal policy in each candidate environment, which is
+itself an AIXI-style recursion.
+
+So AIXI is, exactly, Solomonoff induction plus Bayesian decision theory plus
+reward maximization, fastened together. Each piece is a component a full
+treatment of reinforcement learning would unpack on its own: the Solomonoff
+prior is a universal Bayesian prior, computable to no finite degree but the
+right ideal for a learner that wants robustness to model misspecification;
+Bayesian decision theory says the action maximizing posterior expected utility
+is the action a coherent agent should take; and reward maximization sets that
+utility to a discounted sum of rewards, which is itself a strong commitment
+(the subject of the next section).
+
+\textbf{The parallel.} The supervised arc had Solomonoff induction as the
+unachievable but illuminating prediction ideal, with modern language models as
+its practical computable approximations. Reinforcement learning has AIXI as the
+unachievable but illuminating \emph{action} ideal, with modern algorithms
+(REINFORCE, deep $Q$-networks, proximal policy optimization, MuZero, decision
+transformers) as its practical computable approximations. In both arcs the
+architecture is the computable inductive bias substituted for an incomputable
+optimum. You cannot run Solomonoff; you can run a transformer. You cannot run
+AIXI; you can run proximal policy optimization. The architecture \emph{is}
+where you compromise, and reading AIXI as the target sharpens what each
+practical method is doing. $Q$-learning learns a single environment model
+implicitly where AIXI averages over all of them; proximal policy optimization
+uses a parameterized policy and a clipped surrogate objective where AIXI takes
+an exact arg-max over an infinite expectation; decision transformers collapse
+policy and value into one sequence-prediction problem where AIXI keeps them
+separate. Each compromise can be located as a specific distance from the AIXI
+specification.
 
 \section{Inductive bias, the reinforcement-learning axis}\label{sec:rl-axis}
-Placeholder.
+
+The supervised chapters argued that architecture (\Cref{ch:cnn},
+\Cref{ch:rnn}, \Cref{ch:transformer}) and output head (\Cref{ch:output-heads})
+are parallel axes of inductive bias. The same frame extends to reinforcement
+learning, with more design surface, each piece of which encodes an assumption
+about the task.
+
+\begin{enumerate}
+\item \textbf{Reward shaping.} The reward function is a prior about the value
+landscape. A sparse goal-reward, the gridworld setup above, is minimal-prior:
+the agent has to find a successful trajectory before it gets any informative
+gradient at all. A shaping reward, a small positive bonus for moving closer to
+the goal, injects information about which intermediate states count as
+progress. The same lever can mislead if the hint is wrong, which has its own
+literature under reward hacking and Goodhart's law. The reward is a teacher,
+and the choice of teacher is a prior.
+\item \textbf{Policy architecture.} Whether $\pi_\theta$ is a multilayer
+perceptron, a convolutional network over pixels, a recurrent network over
+partial observations, or a transformer over state-action histories is the
+\emph{same} architectural choice the supervised chapters catalogued. The
+convolutional locality of \Cref{ch:cnn}, the recurrence of \Cref{ch:rnn}, and
+the content-addressable lookup of \Cref{ch:transformer} all carry over intact,
+now in service of action selection rather than prediction. The gridworld uses
+a multilayer perceptron because its state is small, discrete, and structureless;
+Atari from pixels uses a convolutional network; partially observed tasks with
+hidden state use a recurrent network or a transformer.
+\item \textbf{Exploration strategy.} Epsilon-greedy, an entropy bonus,
+intrinsic curiosity, upper-confidence-bound action selection, Thompson
+sampling: each is a prior about where useful information lives. Epsilon-greedy
+assumes uniform-random is good enough some of the time; curiosity assumes novel
+states are valuable; Thompson sampling assumes a posterior over models and
+exploits its variance. Different priors, different exploration behavior, and a
+real source of difference between algorithms on sparse-reward tasks.
+\item \textbf{Algorithm class.} On-policy against off-policy, model-free
+against model-based, value against policy against actor-critic: each commits to
+a structural assumption about what is cheap, what is reliable, and what
+generalizes. Off-policy methods assume trajectories from older policies still
+inform the current one; model-based methods assume a learned dynamics model
+will repay the cost of fitting it; value-based methods assume the Bellman
+recursion is more reliable than direct policy parameterization. The choice is a
+prior about the structure of the task and of the learning dynamics.
+\end{enumerate}
+
+All of these are inductive biases in exactly the sense that translation
+equivariance is for a convolutional network. The heads-as-bias frame of
+\Cref{ch:output-heads} carries over cleanly too: a discrete policy is a
+categorical (softmax) head, and a value function is an identity-plus-squared-
+error (Gaussian) head, the same two output-distribution choices already in
+hand, now predicting actions and returns instead of labels. A real
+reinforcement-learning system is a stack of priors at every level, reward,
+policy architecture, exploration, algorithm class, and matching each to the
+task is a separate engineering problem. The pattern from \Cref{ch:output-heads}
+through \Cref{ch:transformer} generalizes to reinforcement learning; it just
+has more axes.
