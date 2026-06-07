@@ -1,0 +1,118 @@
+% DEFINED:   sec:gridworld, fig:gridworld-learning-curve
+% RESOLVED:  sec:reinforce-bridge (the derived update), ch:foundations (the MLP)
+% FORWARD:   (none)
+
+\section{Worked example: REINFORCE on a $5 \times 5$ gridworld}\label{sec:gridworld}
+
+The full implementation is \texttt{examples/reinforce\_gridworld.py}, around
+250 lines of standalone NumPy. It is NumPy rather than the pure-Python
+\texttt{scratchnn} core for the same honest reason the Transformer chapter
+gave: a policy-gradient run does 2000 episodes of up to 25 steps each, so
+roughly $5 \times 10^4$ forward passes, and the per-step Python overhead of
+the teaching core would dominate the actual learning. The model itself is the
+same multilayer perceptron of \Cref{ch:foundations}, just vectorized. The
+policy network, \texttt{PolicyMLP}, is deliberately the same
+\texttt{Linear(25, 64)} $\to$ \texttt{Tanh} $\to$ \texttt{Linear(64, 4)} stack
+with a \texttt{SoftmaxCrossEntropy} head that \texttt{scratchnn} would build,
+so the chapter can point at the toolkit without importing it. The interesting
+object is no longer the layer; it is the loss, and the loss is the one derived
+in \Cref{sec:reinforce-bridge}.
+
+\textbf{Why a gridworld.} A multi-armed bandit has no state and collapses
+credit assignment to a single step. A continuous-control task like CartPole
+has a dense reward, which hides the credit-assignment problem behind a
+forgiving signal. A $5 \times 5$ gridworld has a small discrete state space, a
+sparse reward (almost all of it arrives at the goal), and an obvious picture:
+credit assignment is on the page, and you can watch the value of progress
+propagate backward from the goal as training proceeds.
+
+\textbf{Setup.} The state is the agent's position $(r, c) \in \{0, \ldots,
+4\}^2$, one-hot-encoded as a 25-dimensional vector. The four actions are up,
+down, left, and right; off-grid moves are no-ops. The reward is $-0.01$ per
+step and $+1.0$ on entering the goal cell, and the episode ends at the goal or
+after 25 steps. The discount is $\gamma = 0.99$. The policy is the
+one-hidden-layer MLP above, 64 $\tanh$ units into a four-way softmax. The
+update is REINFORCE with a moving-average return baseline, $b_{\text{new}} =
+0.9\, b_{\text{old}} + 0.1\, R_{\text{episode}}$, and the optimizer is plain
+SGD with learning rate $0.05$.
+
+\textbf{The training loop.} For each episode the loop rolls out under
+$\pi_\theta$, computes the returns-to-go by a single backward pass over the
+rewards, forms the per-step weights $w_t = G_t - b$, and descends on
+$-\sum_t \log \pi_\theta(a_t \mid s_t)\, w_t$. That descent is the softmax
+cross-entropy of \Cref{sec:reinforce-bridge} summed over the episode and
+reweighted per step.
+
+\begin{lstlisting}
+# The REINFORCE training loop (examples/reinforce_gridworld.py, trimmed).
+for ep in range(n_episodes):
+    states, actions, rewards = rollout(policy, rng)   # sample a trajectory
+    G = returns_to_go(rewards)                        # G_t, one backward pass
+    episode_return = float(rewards.sum())
+
+    # Moving-average baseline; subtracting it leaves the gradient unbiased.
+    baseline = baseline_beta * baseline + (1 - baseline_beta) * episode_return
+    weights = G - baseline                            # w_t = G_t - baseline
+
+    grads = policy.grads_for_episode(states, actions, weights)  # p - onehot, *w
+    policy.step_sgd(grads, lr)                         # one SGD step
+\end{lstlisting}
+
+\textbf{Results.} The optimal trajectory is the Manhattan path of length 8, so
+the optimal return is $1.0 - 0.01 \times 7 = 0.93$ (seven step-penalties
+before the goal-reward step). The numbers below are the seed-fixed run in the
+paired notebook (\texttt{notebooks/ch08-rl.ipynb}; seed 0, 2000 episodes,
+$\gamma = 0.99$, learning rate $0.05$). Before training, under the randomly initialized
+policy:
+\[
+  \text{mean return } -0.1258,
+  \qquad \text{mean length } 24.20 \text{ steps},
+  \qquad \text{success } 11.5\%.
+\]
+The agent wanders. About one trial in nine stumbles into the goal inside the
+25-step budget, and the expected return is negative because most episodes pay
+the per-step cost and hit the step limit without a reward. After 2000
+episodes:
+\[
+  \text{mean return } +0.9278,
+  \qquad \text{mean length } 8.21 \text{ steps},
+  \qquad \text{success } 100.0\%.
+\]
+Every sampled trajectory now reaches the goal, and the average length is barely
+above the optimal 8. The trained greedy policy traces an exact shortest path,
+\[
+  (0,0) \to (1,0) \to (2,0) \to (2,1) \to (2,2) \to (2,3) \to (3,3) \to (3,4)
+  \to (4,4),
+\]
+eight steps, return $+0.93$, exactly optimal. The policy has learned to walk
+to the goal.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.82\linewidth]{figures/ch08-gridworld-learning-curve.pdf}
+  \caption{Mean return per 100 episodes against episode number for the
+  REINFORCE agent on the $5 \times 5$ gridworld (the seed-fixed run in
+  \texttt{notebooks/ch08-rl.ipynb}). The dashed line marks the optimal return
+  of $+0.93$ for the eight-step Manhattan path; the dotted line marks the
+  untrained baseline of $-0.126$. The curve has the shape every
+  policy-gradient run on a sparse-reward task has: a fast climb in the first
+  roughly 200 episodes once the first chance trajectory reaches the goal and
+  REINFORCE reinforces every action that got it there, then a slow refinement
+  as the policy concentrates on the shortest paths.}
+  \label{fig:gridworld-learning-curve}
+\end{figure}
+
+\Cref{fig:gridworld-learning-curve} plots the smoothed learning curve, and the
+shape it shows is the one that matters. While the agent never reaches the
+goal, every episode collects only the $-0.01$ per-step penalty and the
+parameters drift on essentially uninformative gradients. The first chance
+trajectory that reaches the goal produces a strongly positive return, the
+REINFORCE update reinforces every action it took, and the policy now has a
+non-trivial probability of repeating that trajectory; subsequent successes
+refine it. The fast initial rise is the moment the algorithm finds an
+algorithm; the long tail is parameter tuning. This is the smallest visible
+version of a phenomenon that haunts larger reinforcement learning: with sparser
+rewards, longer horizons, or more actions, the chance trajectory that gives the
+first informative return can take far longer to arrive, and reward shaping,
+curiosity-driven exploration, and behavioral-cloning warm-starts are all
+interventions aimed at shortening that wait.

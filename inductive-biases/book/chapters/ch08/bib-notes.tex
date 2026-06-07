@@ -1,0 +1,33 @@
+% DEFINED:   (no new labels)
+% RESOLVED:  cite keys: williams1992reinforce, sutton2018rl,
+%            silver2017alphazero, hutter2005uai
+% FORWARD:   (none)
+
+\section*{Bibliographic Notes}
+
+The REINFORCE estimator derived in \Cref{sec:reinforce} is due to
+\textcite{williams1992reinforce}, who introduced the class of
+score-function gradient algorithms for connectionist reinforcement learning
+and proved that the log-likelihood-weighted update follows the gradient of
+expected reward in expectation. The reward-to-go form and the baseline
+argument used here are the standard modern presentation.
+\textcite{sutton2018rl} is the depth reference for everything this chapter
+compresses: the Markov decision process formalism of \Cref{sec:mdp}, the
+value-based, policy-gradient, and model-based families of
+\Cref{sec:credit-assignment}, the policy-gradient theorem, and the
+bias-variance reading of Monte Carlo against temporal-difference credit
+assignment.
+
+The boundary-blurring systems named in the closing are documented in their
+own right. \textcite{silver2017alphazero} is AlphaZero, which trains its
+policy network by softmax cross-entropy and its value network by squared
+error against targets produced by Monte Carlo tree search, the clearest
+large-scale instance of the chapter's bridge: the supervised toolkit as the
+inner loop, with a search procedure rather than a human supplying the labels.
+
+The theoretical north star of \Cref{sec:aixi} is AIXI, set out in full by
+\textcite{hutter2005uai}. The text develops AIXI as Solomonoff induction
+joined to Bayesian sequential decision theory, the optimal-but-incomputable
+agent against which practical reinforcement-learning algorithms can be read
+as computable approximations, exactly as the language-modeling chapter read
+practical predictors against Solomonoff induction.

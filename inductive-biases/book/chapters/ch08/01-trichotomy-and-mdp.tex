@@ -1,0 +1,126 @@
+% DEFINED:   sec:trichotomy, sec:rl-reduction, sec:mdp
+% RESOLVED:  (none; this file makes no \Cref)
+% FORWARD:   sec:credit-assignment, sec:reinforce (later in this chapter)
+
+\section{The trichotomy}\label{sec:trichotomy}
+
+Three standard learning paradigms, with the boundary that matters drawn at
+the right place.
+
+\begin{itemize}
+\item \textbf{Supervised.} Given $(x, y)$ pairs, learn $f_\theta$ such that
+$f_\theta(x) \approx y$. One gradient per example. The loss tells you the
+answer was wrong, \emph{and how to be less wrong on this exact input}.
+\item \textbf{Unsupervised.} Given $x$ alone, learn structure: density,
+clusters, manifolds, factors. There is no target.
+\item \textbf{Reinforcement learning.} Given an environment and a scalar
+reward, learn a policy $\pi_\theta(a \mid s)$ that maximizes expected return.
+The signal is one number per trajectory, not a label per example.
+\end{itemize}
+
+Self-supervised learning, the engine of every modern language model, is not
+a fourth paradigm. Next-token prediction, masked-patch reconstruction, and
+contrastive pretraining all manufacture their own labels from unlabeled
+data, and once the label exists the objective is ordinary supervised
+learning. It is mathematically identical and practically distinct only
+because the data supply is effectively unbounded, which is what changes the
+scaling story. A transformer trained on ten terabytes of web text is running
+the same loss minimization as a one-layer softmax classifier on a table of
+digits, with more data and a heavier model. Self-supervised learning is
+supervised learning that solved its label problem.
+
+So the boundary that matters is not ``do we have labels'' but ``do we have a
+\emph{per-example} gradient signal.'' Supervised and self-supervised learning
+both do. Reinforcement learning does not, and that single absence is what the
+rest of the chapter is about.
+
+\section{The reduction loses what makes RL hard}\label{sec:rl-reduction}
+
+A common move flattens the distinction: supervised learning, the argument
+goes, is just reinforcement learning with reward $r = -\mathrm{NLL}(y \mid
+x)$ at every step. This is technically true. The reduction packages each
+$(x, y)$ pair as a one-step episode in which the agent takes action $\hat y$,
+the environment immediately reveals $y$, and the reward is the negative
+log-likelihood of $y$ under $\pi_\theta(\cdot \mid x)$. Maximizing expected
+reward is then maximum likelihood, and the whole supervised apparatus
+reappears as a degenerate special case.
+
+What the reduction quietly discards is everything that makes reinforcement
+learning hard:
+
+\begin{itemize}
+\item \textbf{Delayed reward.} Here the reward arrives at the same step as
+the action. In general it can arrive many steps later, or only at the end.
+\item \textbf{Sparse reward.} Here every action has a reward. In general most
+actions return nothing, and a single number arrives at the end of a long
+trajectory.
+\item \textbf{Exploration.} Here the action $\hat y$ and the gradient of the
+reward with respect to it are directly available; there is no need to try the
+alternatives. In general the agent only ever sees the reward of the action it
+actually took.
+\item \textbf{Off-policy correction.} Here the data and the policy are the
+same thing. In general there is a real distinction between the behavior that
+generated the data and the target being improved.
+\end{itemize}
+
+Each of those is a hard part of reinforcement learning erased. The genuine
+difficulty underneath all of them is \textbf{temporal credit assignment}. A
+trajectory $\tau = (s_0, a_0, r_1, s_1, a_1, r_2, \ldots, s_T)$ produces a
+single return $R(\tau) = \sum_t r_t$. The learner took, say, two hundred
+actions. Which of them were responsible for the return being high or low?
+
+REINFORCE, advantage estimation, temporal-difference learning, generalized
+advantage estimation, eligibility traces, hindsight relabeling, off-policy
+corrections: every named technique in the field is a piece of that
+credit-assignment machinery. Supervised learning never needs any of it,
+because the label tells you precisely which input produced which loss, and
+the chain rule walks the blame backward through the network. The
+reinforcement-learning loss surface, by contrast, is computed \emph{after}
+the actions are committed, and the trajectory probability is a product over
+many policy decisions of which only some mattered. The reframing earns its
+keep because it lets a reader who has only done supervised work see
+\emph{why} reinforcement learning is hard, not merely \emph{that} it is.
+
+\section{The MDP framing}\label{sec:mdp}
+
+The standard formalism is the \textbf{Markov decision process}. An agent and
+an environment interact in a loop. At step $t$ the agent observes a state
+$s_t$, takes an action $a_t \sim \pi_\theta(\cdot \mid s_t)$, and the
+environment returns a reward $r_{t+1}$ and a next state $s_{t+1} \sim p(\cdot
+\mid s_t, a_t)$.
+
+The \textbf{Markov property} is the assumption that the transition
+distribution $p(s', r \mid s, a)$ depends only on the current $(s, a)$, not on
+the prior history. The ``state'' is, by definition, whatever you need to
+remember for that to hold.
+
+The \textbf{discount} is a choice of $\gamma \in [0, 1)$. The discounted
+return from step $t$ is
+\[
+  G_t = \sum_{k=0}^{\infty} \gamma^k\, r_{t+k+1}.
+\]
+The discount is geometric weighting on the future. At $\gamma = 0$ the agent
+is myopic and only the next reward matters; as $\gamma \to 1$ a reward now and
+a reward in a thousand steps are valued equally. In practice $\gamma \in [0.9,
+0.999]$ is typical, and the effective horizon is about $1 / (1 - \gamma)$
+steps.
+
+The \textbf{objective} is to maximize the expected return
+\[
+  J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[\, R(\tau) \,\right],
+\]
+where $\tau = (s_0, a_0, r_1, s_1, \ldots)$ is a trajectory sampled by
+following $\pi_\theta$ in the environment and $R(\tau) = \sum_{t \ge 0}
+\gamma^t r_{t+1}$. Two derived quantities organize most algorithms, the
+state-value and action-value functions:
+\[
+  V^\pi(s) = \mathbb{E}_\pi[\,G_t \mid s_t = s\,],
+  \qquad
+  Q^\pi(s, a) = \mathbb{E}_\pi[\,G_t \mid s_t = s,\, a_t = a\,].
+\]
+A policy is a conditional distribution over actions given states; a return is
+the discounted sum of rewards along the trajectory the policy induces; we
+want the policy whose induced trajectories have the highest expected return;
+and $V^\pi$ and $Q^\pi$ are the natural quantities to estimate along the way.
+The next section asks how to turn samples of $R(\tau)$ into a gradient on
+$\theta$ at all.

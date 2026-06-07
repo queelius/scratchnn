@@ -1,0 +1,59 @@
+% DEFINED:   ch:rl
+% CONTAINS:  section/figure labels live in the \input'd files below
+%            (sec:trichotomy, sec:rl-reduction, sec:mdp,
+%            sec:credit-assignment, sec:reinforce, sec:reinforce-bridge,
+%            sec:gridworld, fig:gridworld-learning-curve, sec:aixi,
+%            sec:rl-axis, sec:book-close)
+% RESOLVED:  ch:foundations, sec:softmax, ch:output-heads,
+%            ch:fixed-context-lm, ch:cnn, ch:rnn, ch:transformer,
+%            sec:inductive-biases, sec:three-axes
+%            (all backward into Parts I-III)
+% FORWARD:   NONE. This is the last chapter of the book.
+%            It does not reference Chapter 7 (it ties back to the
+%            supervised arc, not interpretability); that omission is
+%            intentional, not a gap.
+
+\chapter[Reinforcement Learning]{Reinforcement Learning: A Scalar Reward
+over Trajectories}%
+\label{ch:rl}
+
+Every chapter so far has varied one of two parallel axes. The architecture
+moved from the multilayer perceptron of \Cref{ch:foundations} through the
+convolutional, recurrent, fixed-context, and attention families of Part~II.
+The output head moved through the Bernoulli, categorical, Gaussian, and
+Poisson choices of \Cref{ch:output-heads}. Both axes lived entirely inside
+\textbf{supervised learning}. The training signal was always a label per
+example, and the gradient question was always the same: how do I move
+$f_\theta(x)$ closer to this specific $y$?
+
+Reinforcement learning is the paradigm where that signal disappears at the
+example level and reappears as a scalar reward, summed along a whole
+trajectory. The distinctive hard part is not the absence of labels. It is
+\textbf{temporal credit assignment}: a trajectory of two hundred actions
+produces one number, and the learner has to work out which of those actions
+mattered. Every named technique in reinforcement learning, from Monte Carlo
+returns to temporal-difference bootstrapping to generalized advantage
+estimation to eligibility traces to hindsight relabeling, is a piece of
+credit-assignment machinery. Supervised learning never needs any of it,
+because it never has the problem: the label pins the blame on the input
+exactly, and the chain rule walks that blame backward through the network.
+
+This chapter does the minimum to draw the line between supervised learning
+and reinforcement learning precisely, and then to dissolve part of it. It
+sets up the trichotomy and the Markov decision process, derives the
+REINFORCE estimator, and then reads the result back as something already
+familiar: softmax cross-entropy weighted by return. The per-step gradient is
+the very expression of \Cref{sec:softmax}, the predicted distribution minus
+the one-hot of the chosen action, now scaled by how good the trajectory
+turned out. The supervised toolkit assembled across Parts~I and~II is, quite
+literally, the inner loop of reinforcement learning. A real NumPy gridworld
+makes that concrete, AIXI names the incomputable north star (mirroring the
+Solomonoff ideal of \Cref{ch:fixed-context-lm}), and the closing section
+ends the book.
+
+\input{chapters/ch08/01-trichotomy-and-mdp}
+\input{chapters/ch08/02-reinforce}
+\input{chapters/ch08/03-gridworld}
+\input{chapters/ch08/04-aixi-and-axis}
+\input{chapters/ch08/05-closing}
+\input{chapters/ch08/bib-notes}

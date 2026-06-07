@@ -1,0 +1,46 @@
+% DEFINED:   sec:interp-closing
+% RESOLVED:  sec:three-axes
+% FORWARD:   Chapter 8 (reinforcement learning; prose-only, no \Cref)
+
+\section{Closing: the inductive-bias frame, completed}\label{sec:interp-closing}
+
+The book has organized everything around three axes (\Cref{sec:three-axes}):
+
+\begin{enumerate}
+\item \textbf{Architecture}: structural priors about how features compose, such
+as locality, recurrence, and content-addressable lookup.
+\item \textbf{Output head}: priors about the distribution of the response, such
+as Bernoulli, Categorical, Gaussian, and Poisson.
+\item \textbf{Implementation realization}: whether the gradient procedure can
+actually discover the right parameters, given initialization, optimizer, data,
+and schedule.
+\end{enumerate}
+
+This chapter has been the \textbf{interpretability lens} that sits across all
+three. Once a model is trained, mechanistic interpretation tells us \emph{which}
+of the bias-permitted solutions the gradient procedure actually picked, and how
+legibly. At $M = 8$ the answer was a single, clean, fully readable circuit:
+layer 1 aggregates the address, layer 2 dereferences, and ablations confirm both
+are load-bearing. At $M = 32$, one increment of scale later, the answer was a
+causally perfect pointer whose mechanism the attention maps render only partially
+legible, and which a causal trace makes clean again.
+
+That progression is the real shape of the field: legible circuits in the smallest
+models, partial legibility as scale grows, and causal probes rather than
+weight-reading as the reliable ground truth. The meta-lesson is the one the
+$M = 32$ model forced on us. Attention weight is suggestive, not probative; it is
+not information flow; and a computation spread across heads, layers, and the
+value pathway will hide from it. Reading a model is not staring at its attention
+maps. It is intervening on its activations and watching what changes.
+Interpretability is how we discover which solution gradient descent picked, and
+the $M = 8$ to $M = 32$ step is a warning about how quickly "which" gets hard to
+answer.
+
+The closing chapter changes the setting entirely. Until now the learning signal
+has been a per-example label, a target the network is trained to match. The next
+chapter replaces it with a scalar reward over whole trajectories and turns to
+reinforcement learning, where the supervised toolkit assembled across the first
+seven chapters reappears as the inner loop of something larger. The
+inductive-bias frame carries over, the interpretability lens carries over, and
+the mechanism we just dissected becomes one tool among several for understanding
+what a learned agent has actually learned.

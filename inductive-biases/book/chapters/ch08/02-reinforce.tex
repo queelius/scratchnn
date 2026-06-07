@@ -1,0 +1,224 @@
+% DEFINED:   sec:credit-assignment, sec:reinforce, sec:reinforce-bridge
+% RESOLVED:  sec:softmax (Ch1, the softmax cross-entropy gradient),
+%            ch:output-heads (heads-as-priors), ch:foundations (the MLP)
+% FORWARD:   sec:gridworld (later in this chapter)
+
+\section{Credit assignment, three families}\label{sec:credit-assignment}
+
+Supervised learning gives every example its own loss, and the chain rule pins
+the blame precisely. Reinforcement learning gives one return per episode, or a
+few sparse rewards along the way, with a sequence of many actions between
+them, and the question of which action mattered is genuinely open. There are
+three families of answers, each a different bet about how to split the credit.
+
+\begin{itemize}
+\item \textbf{Value-based (and Monte Carlo at the extreme).} Estimate how good
+states or actions are. The Monte Carlo version waits until the episode ends
+and attributes the entire realized return $G_t$ to every action taken,
+optionally discounted by recency: high variance, since one trajectory is one
+sample, but unbiased, since the return is what actually happened.
+Temporal-difference methods do not wait; they use a learned value estimate
+$V(s_{t+1})$ as a bootstrap target for $V(s_t)$ through the Bellman equation,
+which lowers variance at the cost of a bias from the accuracy of $V$.
+\item \textbf{Policy-gradient.} Skip the per-trajectory credit-assignment
+question entirely. Estimate the gradient of $J(\theta)$ as an expectation over
+trajectories, average many samples, and let the averaging do the work of
+variance reduction. This is the family the chapter develops, because the
+bridge to supervised cross-entropy is exact and the derivation is short.
+\item \textbf{Model-based.} Learn the environment's dynamics $p(s' \mid s, a)$
+and plan against the learned model, paying the cost of fitting it in exchange
+for being able to imagine rollouts rather than execute them.
+\end{itemize}
+
+Actor-critic, $n$-step returns, generalized advantage estimation, and
+eligibility traces are interpolations between these: bias-variance trade-offs
+on the shape of the credit signal.
+
+\section{REINFORCE, derived}\label{sec:reinforce}
+
+Parameterize the policy as $\pi_\theta(a \mid s)$. The mental image is a
+neural network outputting a softmax over discrete actions, or the parameters
+of a continuous distribution; the gridworld below uses the discrete-softmax
+form, with the same multilayer perceptron of \Cref{ch:foundations} behind the
+head. The objective is the expected return under the policy-induced trajectory
+distribution,
+\[
+  J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]
+            = \sum_\tau p_\theta(\tau)\, R(\tau),
+\]
+with $p_\theta(\tau)$ the probability of sampling trajectory $\tau$. We want
+$\nabla_\theta J(\theta)$.
+
+The load-bearing identity is the \textbf{log-derivative trick}. For any
+parameterized distribution $p_\theta$,
+\[
+  \nabla_\theta p_\theta(\tau) = p_\theta(\tau)\,
+      \nabla_\theta \log p_\theta(\tau),
+\]
+which is nothing more than $\nabla \log x = \nabla x / x$ rearranged. It turns
+the gradient of a probability, which is awkward because probabilities are
+normalized, into the gradient of a log-probability, which factors cleanly,
+times the probability itself, which becomes an expectation as soon as we
+sample. Applying it to the objective,
+\[
+  \nabla_\theta J(\theta)
+    = \sum_\tau \nabla_\theta p_\theta(\tau)\, R(\tau)
+    = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[
+          \nabla_\theta \log p_\theta(\tau)\, R(\tau)
+      \right].
+\]
+
+Now factor the trajectory probability. A trajectory is sampled by alternating
+policy choices and environment transitions:
+\[
+  p_\theta(\tau) = p(s_0) \prod_{t \ge 0}
+      \pi_\theta(a_t \mid s_t)\, p(s_{t+1} \mid s_t, a_t).
+\]
+Take the log, turning the product into a sum, and differentiate with respect
+to $\theta$:
+\[
+  \nabla_\theta \log p_\theta(\tau)
+    = \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t).
+\]
+The initial-state distribution $p(s_0)$ and the transition kernel $p(s_{t+1}
+\mid s_t, a_t)$ do not depend on $\theta$, so their gradients vanish. Only the
+policy factors survive. This is the structural fact that makes model-free
+reinforcement learning possible: you can estimate the policy gradient without
+ever knowing the environment's dynamics.
+
+Substituting back, the full-return weight on each step collapses to the
+\textbf{reward-to-go} $G_t$. A reward earned \emph{before} step $t$ cannot have
+been influenced by the action $a_t$, so conditioning on the history up to $s_t$
+and using the zero-mean score identity $\mathbb{E}_{a_t}[\nabla_\theta \log
+\pi_\theta(a_t \mid s_t)] = 0$ (the same fact the baseline below relies on), its
+contribution to that step's gradient is exactly zero. What survives is the
+reward-to-go form of REINFORCE:
+\[
+  \boxed{\;\nabla_\theta J(\theta)
+    = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[
+        \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t)\, G_t
+      \right].\;}
+\]
+In words: averaged across sampled trajectories, the gradient of the expected
+return is the sum over time steps of the log-likelihood gradient of the action
+taken, each weighted by the return earned from that step onward. Sample one
+trajectory, compute that sum, and you have an unbiased Monte Carlo estimate of
+$\nabla_\theta J$; step along it with SGD.
+
+\textbf{Variance reduction by a baseline.} Subtracting any state-dependent
+baseline $b(s_t)$ from $G_t$ leaves the expectation unchanged but typically
+reduces variance:
+\[
+  \nabla_\theta J(\theta)
+    = \mathbb{E}\!\left[
+        \sum_t \nabla_\theta \log \pi_\theta(a_t \mid s_t)\,
+        \bigl(G_t - b(s_t)\bigr)
+      \right].
+\]
+The expectation is unchanged because $\mathbb{E}_a[\nabla_\theta \log
+\pi_\theta(a \mid s)] = 0$ for every $s$, so multiplying by a state-dependent
+constant and summing contributes nothing in expectation. How much the variance
+drops depends on how strongly $b(s_t)$ correlates with $G_t$; a learned value
+estimate $V_\phi(s_t)$ is the standard choice, and $G_t - V_\phi(s_t)$ is then
+an estimate of the advantage $A^\pi(s, a)$. That is the half-step from
+REINFORCE to actor-critic. The gridworld example uses a simpler scalar
+baseline, a moving average of recent episode returns; a global constant is the
+trivial state-dependent baseline, so the same unbiasedness argument applies, and
+it is enough to make the gradient useful at that scale.
+
+\section{The bridge: REINFORCE is weighted cross-entropy}\label{sec:reinforce-bridge}
+
+This is the chapter's payoff, and it is a derivation, not an analogy. Look at
+the per-step term in the REINFORCE update, written as a loss to descend (the
+minus sign is so that descending on it ascends on expected return):
+\[
+  \ell_t(\theta) = -\,\log \pi_\theta(a_t \mid s_t)\, \cdot\, G_t.
+\]
+The whole claim is that the first factor is, identically, the supervised
+softmax cross-entropy gradient of \Cref{sec:softmax}. Make the policy concrete
+the way the gridworld does. The network produces a vector of logits $z =
+g_\theta(s_t) \in \mathbb{R}^K$ over the $K$ actions, and the policy is their
+softmax,
+\[
+  \pi_\theta(a \mid s_t) = \mathrm{softmax}(z)_a
+    = \frac{e^{z_a}}{\sum_{j} e^{z_j}}.
+\]
+Treat the action actually taken, $a_t$, as a one-hot label, and the
+log-policy of that action is exactly the negative cross-entropy between that
+one-hot and the predicted distribution:
+\[
+  -\log \pi_\theta(a_t \mid s_t)
+    = -\log \mathrm{softmax}(z)_{a_t}
+    = \underbrace{\log\!\Bigl(\textstyle\sum_j e^{z_j}\Bigr) - z_{a_t}}
+              _{\text{softmax cross-entropy on the label } a_t}.
+\]
+Differentiate with respect to the logits, the same one-line computation
+carried out in \Cref{sec:softmax}. The log-sum-exp term contributes
+$\mathrm{softmax}(z)_k = p_k$ in coordinate $k$, and the $-z_{a_t}$ term
+contributes $-1$ in coordinate $a_t$ only:
+\[
+  \frac{\partial}{\partial z_k}\bigl(-\log \pi_\theta(a_t \mid s_t)\bigr)
+    = p_k - \mathbf{1}[k = a_t],
+  \qquad\text{that is}\qquad
+  \frac{\partial \ell_t}{\partial z}\bigg|_{G_t = 1}
+    = p - \mathrm{onehot}(a_t).
+\]
+This is the predicted distribution minus the one-hot of the chosen action: the
+\emph{same} expression the supervised softmax head produces, the one
+\texttt{SoftmaxCrossEntropy} returns from its backward pass. The full
+per-step REINFORCE gradient is just that vector scaled by the return:
+\[
+  \frac{\partial \ell_t}{\partial z}
+    = \bigl(p - \mathrm{onehot}(a_t)\bigr)\, G_t.
+\]
+Nothing else changes. The chain rule from the logits back through the head and
+the multilayer perceptron is identical to the supervised case, because it is
+the same network. The only edit to the entire backward pass is a single scalar
+multiply per time step.
+
+So policy gradient is supervised softmax cross-entropy on the actions the
+agent took, with each per-sample loss reweighted by the return $G_t$ (or by an
+advantage). Reading the same identity at three weights tells the whole family
+apart:
+
+\begin{itemize}
+\item \textbf{Behavioral cloning} is the constant-weight case. Given a dataset
+of expert $(s, a)$ pairs, fit $\pi_\theta$ by ordinary softmax cross-entropy.
+It is pure supervised learning of a policy.
+\item \textbf{REINFORCE} is the same softmax cross-entropy on the actions the
+\emph{agent} took, weighted by how good the return turned out to be.
+\item \textbf{Actor-critic} is the same softmax cross-entropy weighted by an
+advantage, with a learned baseline subtracted from $G_t$.
+\end{itemize}
+
+In supervised learning the dataset tells you what the right action was. In
+reinforcement learning the return tells you, after the fact, how good the
+action you took was, and you weight the gradient accordingly. The loss surgery
+is the same; what differs is who supplies the label, you or the environment,
+and how the per-sample importance is scored, uniformly or by return. This is
+the through-line of the whole book stated at its sharpest. The supervised
+toolkit assembled in \Cref{ch:foundations} and \Cref{ch:output-heads}, a
+\texttt{Linear} stack, a $\tanh$ nonlinearity, and a softmax cross-entropy
+head, is not merely \emph{analogous} to the inner loop of reinforcement
+learning. It \emph{is} the inner loop. The gridworld implements this literally:
+its update is a softmax over the episode's states, a subtract-the-one-hot
+step, and a per-step scale by the return.
+
+\begin{lstlisting}
+# The REINFORCE gradient for one episode (examples/reinforce_gridworld.py).
+# states: (T, 25) one-hot states; actions: (T,); weights: (T,) = G_t - baseline.
+Z2 = H @ self.W2 + self.b2                  # action logits, shape (T, 4)
+Z2 = Z2 - Z2.max(axis=1, keepdims=True)
+P  = np.exp(Z2); P /= P.sum(axis=1, keepdims=True)   # softmax over actions
+
+dlogits = P.copy()
+dlogits[np.arange(T), actions] -= 1.0       # p - onehot(a): the Ch.1 gradient
+dlogits *= weights[:, None]                 # scale each step by G_t - baseline
+# ... and the rest is the ordinary MLP backward pass through W2, tanh, W1.
+\end{lstlisting}
+
+The line \texttt{dlogits[np.arange(T), actions] -= 1.0} is the entire
+conceptual content of the chapter. It is \Cref{sec:softmax}'s $p -
+\mathrm{onehot}(a)$, evaluated at every step of the trajectory; the line below
+it, the scale by the return, is the only thing reinforcement learning adds to
+the supervised gradient.
