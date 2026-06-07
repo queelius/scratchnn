@@ -86,10 +86,13 @@ policy factors survive. This is the structural fact that makes model-free
 reinforcement learning possible: you can estimate the policy gradient without
 ever knowing the environment's dynamics.
 
-Substituting back, and using the causality argument that a reward earned
-before step $t$ cannot have been influenced by the action $a_t$ (so its
-contribution to that step's gradient averages to zero), the
-\textbf{reward-to-go} form of REINFORCE drops out:
+Substituting back, the full-return weight on each step collapses to the
+\textbf{reward-to-go} $G_t$. A reward earned \emph{before} step $t$ cannot have
+been influenced by the action $a_t$, so conditioning on the history up to $s_t$
+and using the zero-mean score identity $\mathbb{E}_{a_t}[\nabla_\theta \log
+\pi_\theta(a_t \mid s_t)] = 0$ (the same fact the baseline below relies on), its
+contribution to that step's gradient is exactly zero. What survives is the
+reward-to-go form of REINFORCE:
 \[
   \boxed{\;\nabla_\theta J(\theta)
     = \mathbb{E}_{\tau \sim \pi_\theta}\!\left[
@@ -119,8 +122,9 @@ drops depends on how strongly $b(s_t)$ correlates with $G_t$; a learned value
 estimate $V_\phi(s_t)$ is the standard choice, and $G_t - V_\phi(s_t)$ is then
 an estimate of the advantage $A^\pi(s, a)$. That is the half-step from
 REINFORCE to actor-critic. The gridworld example uses a simpler scalar
-baseline, a moving average of recent episode returns, which is enough to make
-the gradient useful at that scale.
+baseline, a moving average of recent episode returns; a global constant is the
+trivial state-dependent baseline, so the same unbiasedness argument applies, and
+it is enough to make the gradient useful at that scale.
 
 \section{The bridge: REINFORCE is weighted cross-entropy}\label{sec:reinforce-bridge}
 
