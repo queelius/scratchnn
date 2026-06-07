@@ -1,6 +1,78 @@
 % DEFINED:   sec:book-close
 % RESOLVED:  sec:three-axes, sec:inductive-biases, ch:foundations
+%            (all backward). NO \Cref to Chapter 7 (the journey narrates the
+%            causal trace in prose, but ties back to the supervised arc).
 % FORWARD:   NONE. This is the last section of the book.
 
 \section{Closing: the book, completed}\label{sec:book-close}
-Placeholder.
+
+This is where the book ends, so it is worth saying plainly what the eight
+chapters were for. The thread was a single equation with three slots: a
+parametric model, an output distribution, and a loss, trained by gradient
+descent on data. Choosing what to put in those slots is choosing an inductive
+bias, and the whole book was a tour of those choices along three axes
+(\Cref{sec:three-axes}).
+
+\begin{enumerate}
+\item \textbf{Architecture.} Structural priors about how features compose:
+locality and weight-sharing in a convolutional network, recurrence in a
+recurrent one, a bounded window in the fixed-context model, content-addressable
+lookup in a transformer. Each is a statement about which functions are easy to
+represent and which the data should not have to teach from scratch.
+\item \textbf{Output head.} Priors about the distribution of the response:
+Bernoulli for a bit, categorical for a class, Gaussian for a real value,
+Poisson for a count. The head fixes what ``being right'' even means, and the
+loss follows from it.
+\item \textbf{Implementation realization.} Whether gradient descent, from a
+given initialization and schedule, actually finds one of the bias-permitted
+solutions, and whether we can read that solution back off the trained weights.
+\end{enumerate}
+
+The journey ran the length of all three. It opened (\Cref{ch:foundations}) with
+the smallest non-trivial case, a multilayer perceptron learning XOR, the
+problem a single linear boundary provably cannot solve and a hidden layer can:
+the first inductive bias in the book (\Cref{sec:inductive-biases}), the bias
+toward composing simple boundaries into a curved one. It then walked the output
+head through its distributional choices, and the architecture through the
+convolutional, recurrent, fixed-context, and attention families, each matched
+to a structure in its data. The pointer transformer was the high-water mark of
+the architecture axis, a model that solves content-addressable lookup because
+the lookup is built into the attention operation. Then the book turned the lens
+around and read the bias back out of a trained model, finding that having the
+right architecture is necessary but not sufficient: at the smallest scale the
+learned circuit was perfectly legible, and one increment of scale later a
+causal trace, not the attention maps, was what recovered the mechanism. That
+was the third axis made empirical, and the book's most honest result, that what
+gradient descent realized is a separate question from what the architecture
+permits.
+
+This final chapter changed the learning signal one last time. The per-example
+label disappeared and came back as a scalar reward over a whole trajectory, so
+the hard new problem was temporal credit assignment. And yet the inner loop
+turned out to be the toolkit from the very first chapter: REINFORCE is softmax
+cross-entropy on the actions the agent took, the predicted distribution minus
+the one-hot chosen action, scaled by the return. The supervised gradient of
+\Cref{ch:foundations} is, line for line, what a policy-gradient agent runs;
+what reinforcement learning adds is the outer loop, the credit-assignment
+machinery, and the trajectory distribution over which that inner loss is
+weighted. The same is true above the gridworld: softmax cross-entropy is the
+gradient signal in behavioral cloning, in policy gradient, in the clipped
+surrogate of proximal policy optimization, in the policy network of AlphaZero;
+squared error is the gradient signal in value-function regression and in the
+reward-model fitting step of learning from human feedback. The supervised
+toolkit is the inner loop of every modern learning system; the rest is which
+labels you feed it and how you weight them.
+
+Two incomputable ideals bracketed the book. Solomonoff induction was the
+optimal predictor that no machine can run, and the language models of Part~II
+were its computable approximations. AIXI is its action-taking sibling, the
+optimal agent that no machine can run, and the REINFORCE agent of this chapter
+is its smallest computable shadow: a single policy network, a single return, a
+single gradient step. Between the incomputable optimum and the runnable
+approximation sits the architecture, which is exactly where the compromise
+lives, and which is exactly what an inductive bias is. The boundary between
+supervised learning and reinforcement learning, like the boundary between
+prediction and action, turns out to be conceptual rather than categorical, and
+the systems that matter most today thread back and forth across it. The math
+that carries across, the math worked out by hand across these eight chapters,
+is the part worth keeping. That is the end of the book.
