@@ -53,7 +53,7 @@ vanishing-gradient demonstration uses `random.seed(0)`.
 BPTT chunks of length 33; `RNNCell(75, 64) -> Linear(64, 75)`; 13,835
 parameters; sequence length 32, learning rate 0.5, global grad-norm clip 5,
 15 epochs. Mean per-character loss falls from the uniform baseline
-`log 75 ~ 4.32` nats toward roughly **2.06** nats/char over the 15 epochs.
+`log 75 ~ 4.32` nats toward roughly **2.05** nats/char over the 15 epochs.
 `gradient_check` on the unrolled cell (T=3) is on the order of 1e-9. The
 vanishing-gradient demonstration shows the backward Jacobian-product norm
 decaying over unroll depth.""")

@@ -58,7 +58,7 @@ Title: **Convolutional Networks: Locality and Translation Equivariance**. Label 
 | 4 | Forward pass, in code `sec:conv-forward` | 1.0 | `Conv2D` listing | Real five-loop forward; the largest layer written in pure Python. |
 | 5 | Backward pass, by careful chain rule `sec:conv-backward` | 1.0 | `Conv2D` listing | Hand-derived backward with `+=` kernel accumulation; chains back to `\Cref{sec:mlp-backprop}`. |
 | 6 | Training on 8x8 digits `sec:conv-digits` | 1.0 | notebook | CNN 1490 params 95.4% vs MLP 2410 params 96.1%; smaller and competitive. |
-| 7 | The permuted-pixel control `sec:permuted-pixel` | 1.0 | notebook; figure | The falsification test: MSE-pixel permutation drops CNN 1.51pp vs MLP 0.45pp (>3x). Figure: the comparison. |
+| 7 | The permuted-pixel control `sec:permuted-pixel` | 1.0 | notebook; figure | The falsification test: MSE-pixel permutation drops CNN 1.50pp vs MLP 0.45pp (>3x). Figure: the comparison. |
 | 8 | Inductive bias, named `sec:cnn-bias` | 0.75 | booklet | Locality plus equivariance as a bet; the right prior is empirical. Backward `\Cref{sec:inductive-biases}`. |
 | 9 | What stayed pure Python, and what will not `sec:pure-python-boundary` | 0.5 | fresh | The conv is the last large pure-Python layer; forward-promise NumPy/PyTorch at the Transformer (prose). `GlobalAvgPool` as a one-line natural-extension pointer (invariance). |
 
