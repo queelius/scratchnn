@@ -4,12 +4,15 @@
 
 \section{Training on 8x8 digits}\label{sec:conv-digits}
 
-We train the convolutional network on the same data and the same loop as the
-multilayer perceptron: UCI optdigits (3823 training, 1797 test, ten classes),
-pixel values normalized to $[0, 1]$, mini-batch stochastic gradient descent.
-Both models use the same hyperparameters, 40 epochs at learning rate 0.1 with
-batch size 32, so the comparison is on equal footing. Both finish in a few
-minutes of pure Python.
+We train the convolutional network against a multilayer-perceptron baseline on
+UCI optdigits (3823 training, 1797 test, ten classes), pixel values normalized
+to $[0, 1]$, mini-batch stochastic gradient descent. This is the fuller optdigits
+release; Chapter~1 used the smaller sklearn subset of the same collection (1437
+train, 360 test), which is why the multilayer perceptron's test accuracy here,
+96.1\%, sits a touch below the 97.2\% it reached there. The two models in this
+chapter use the same hyperparameters, 40 epochs at learning rate 0.1 with batch
+size 32, so the CNN-versus-MLP comparison is on equal footing. Both finish in a
+few minutes of pure Python.
 
 \begin{center}
 \begin{tabular}{@{}llrr@{}}

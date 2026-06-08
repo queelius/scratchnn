@@ -109,7 +109,7 @@ Eight tasks. Notebook is Task 2 (notebook-first). No exercises task.
 `notebooks/ch03-cnn.ipynb`. Port from `examples/digits_cnn.py` and `examples/digits.py`.
 
 - UCI optdigits (3823 train / 1797 test, pixels normalized to [0,1]). Train the MLP baseline `64-32-10` and the CNN `Conv2D(1,4,k=3) -> ReLU -> Linear(144,10)` (40 epochs, lr 0.1, batch 32). Record test accuracies (target MLP ~96.1%, CNN ~95.4%) and parameter counts (MLP 2410, CNN 1490 = 40 conv + 1450 head; conv 40 vs `Linear(64,144)` 9360 = 234x).
-- Permuted-pixel control: apply one fixed random permutation to the 64 pixels for both models, retrain, record the accuracy drop (target MLP -0.45pp, CNN -1.51pp; CNN drop > 3x MLP drop is the falsification signature).
+- Permuted-pixel control: apply one fixed random permutation to the 64 pixels for both models, retrain, record the accuracy drop (target MLP -0.45pp, CNN -1.50pp; CNN drop > 3x MLP drop is the falsification signature).
 - `gradient_check` on a small `Conv2D` (target ~1e-9).
 - Fix and record seeds; execute end to end with stored outputs; a Results cell with the exact numbers.
 - **Figure:** `book/figures/ch03-permuted-pixel.pdf` (standard vs permuted accuracy, CNN vs MLP, e.g. grouped bars).
@@ -134,7 +134,7 @@ File `02-conv-code.tex`. ~2 pp. Header: DEFINED `sec:conv-forward`, `sec:conv-ba
 File `03-digits-and-control.tex`. ~2 pp. Header: DEFINED `sec:conv-digits`, `sec:permuted-pixel`, `fig:permuted-pixel`; RESOLVED (none new).
 
 - Checklist (sec 6): CNN 1490 params reaching ~95.4% vs the Chapter 1 MLP 2410 params at ~96.1%: smaller and competitive. Note the 8x8 digits are pre-pooled from 32x32 NIST by 4x4 block-counting (already a local feature extractor), explaining the small absolute gap. Numbers from the notebook.
-- Checklist (sec 7): the **permuted-pixel control** as the falsification test. A fixed random permutation of the 64 pixels destroys adjacency; if the CNN truly uses locality it should lose more than the MLP. Result: MLP -0.45pp, CNN -1.51pp (CNN drop > 3x). **Place `fig:permuted-pixel`** with `\includegraphics` and a `\Cref`. Numbers from the notebook.
+- Checklist (sec 7): the **permuted-pixel control** as the falsification test. A fixed random permutation of the 64 pixels destroys adjacency; if the CNN truly uses locality it should lose more than the MLP. Result: MLP -0.45pp, CNN -1.50pp (CNN drop > 3x). **Place `fig:permuted-pixel`** with `\includegraphics` and a `\Cref`. Numbers from the notebook.
 - Commit: `ch03: sections 6-7 digits training and the permuted-pixel control`.
 
 ### Task 6: Sections 8 to 9, inductive bias named and the pure-Python boundary

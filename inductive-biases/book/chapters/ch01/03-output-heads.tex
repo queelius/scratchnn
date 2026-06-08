@@ -28,7 +28,7 @@ Differentiating with respect to the logit $z$ gives a clean result:
 \end{equation}
 Prediction minus target. Every weight gradient follows by the chain
 rule, $\partial L / \partial w_j = (p - y)\, x_j$, and we descend:
-$\vw \leftarrow \vw - \eta\, \partial L / \partial \vw$.
+$\vw \leftarrow \vw - \alpha\, \partial L / \partial \vw$.
 
 In code, logistic regression is one \texttt{Linear} layer with a
 \texttt{SigmoidBCE} loss:

@@ -132,10 +132,10 @@ layer, each potentially a different lookup. A character-level language model
 trained on prose, for instance, develops heads that attend to the previous space,
 heads that attend to the start of the current word, heads that attend to repeated
 characters, each a small specialized lookup that together enable rich behavior.
-Our one-head model has none of this structure to find. (An archived
-character-level experiment in the repository,
-\texttt{docs/series/archive/transformer-text.md}, visualizes exactly these
-per-head patterns for readers who want to see specialization in the wild.)
+Our one-head model has none of this structure to find. (These per-head
+specializations are exactly what mechanistic-interpretability studies of trained
+character-level language models visualize; our pointer task is deliberately too
+small to grow them.)
 
 \item \textbf{Activation patching.} The ablations here zero out an attention
 layer wholesale. A finer tool is to \emph{patch} an activation from one input
