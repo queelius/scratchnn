@@ -29,7 +29,11 @@ query, and the output is that position's value.
 When the query is the encoding of an address, ``return position $k$,'' and the
 keys encode positions, the softmax sharpens to a near one-hot spike on the
 addressed position, and its value is read out. That is a pointer dereference,
-done with differentiable parts so it can be learned by gradient descent.
+done with differentiable parts so it can be learned by gradient descent. Note
+what attention does \emph{not} have on its own: any notion of position. Permuting
+the inputs permutes the outputs identically, so bare attention is exactly the
+permutation-equivariant body the earlier chapters anticipated, and the positional
+encoding added back later is what breaks that symmetry to recover order.
 
 This is where the book's pure-Python through-line ends. The operators below
 are hand-derived NumPy from \texttt{examples/transformer.py}, vectorized
