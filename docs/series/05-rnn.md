@@ -96,19 +96,22 @@ class RNNCell(Layer):
         ...
 
     def forward(self, x, state=None):
+        H = self.hidden_size
         if state is None:
-            state = [0.0] * self.hidden_size
-        # h_new = tanh(W_xh @ x + W_hh @ state + b_h)
-        # Cache (x, state, h_new) for backward.
-        ...
+            state = [0.0] * H
+        h_new = [0.0] * H
+        for i in range(H):                       # one row per hidden unit
+            z = self.b_h[i]
+            for j in range(self.input_size):
+                z += self.W_xh[i][j] * x[j]      # W_xh @ x
+            for j in range(H):
+                z += self.W_hh[i][j] * state[j]  # W_hh @ h_prev
+            h_new[i] = math.tanh(z)
+        self.cache.append((x, state, h_new))     # LIFO, popped in backward
         return h_new, h_new
 
     def backward(self, dh_out, dstate_next=None):
-        # Pop the cache for this timestep.
-        # Total gradient on h_new = dh_out + dstate_next.
-        # Apply tanh derivative, accumulate weight gradients, return
-        # (dx, dh_prev).
-        ...
+        ...  # the BPTT step, shown in full in section 4
         return dx, dh_prev
 ```
 
@@ -164,15 +167,33 @@ added before applying the tanh derivative:
 
 ```python
 def backward(self, dh_out, dstate_next=None):
-    x, h_prev, h_new = self.cache.pop()
+    x, h_prev, h_new = self.cache.pop()          # LIFO: this timestep
+    H = self.hidden_size
+    if dstate_next is None:
+        dstate_next = [0.0] * H
+    # Two gradient paths into h_t: this step's output, and the future.
     dh_total = [dh_out[i] + dstate_next[i] for i in range(H)]
-    da = [dh_total[i] * (1.0 - h_new[i] ** 2) for i in range(H)]
-    # accumulate dW_xh, dW_hh, db_h; backprop to dx and dh_prev.
-    ...
+    # Through tanh: d/dz tanh(z) = 1 - h^2.
+    da = [dh_total[i] * (1.0 - h_new[i] * h_new[i]) for i in range(H)]
+    # Accumulate weight grads (the += across timesteps), as in Linear.
+    for i in range(H):
+        for j in range(self.input_size):
+            self.dW_xh[i][j] += da[i] * x[j]
+        for j in range(H):
+            self.dW_hh[i][j] += da[i] * h_prev[j]
+        self.db_h[i] += da[i]
+    # Backprop to this step's input and to the previous state.
+    dx = [sum(self.W_xh[i][j] * da[i] for i in range(H))
+          for j in range(self.input_size)]
+    dh_prev = [sum(self.W_hh[i][j] * da[i] for i in range(H))
+               for j in range(H)]
     return dx, dh_prev
 ```
 
-Weight gradients accumulate across all $T$ timesteps. This is the same
+The merge `dh_total = dh_out + dstate_next` is the whole of BPTT: the
+gradient at step $t$ is what flowed back from this step's output plus
+what flowed back from the future through $h_{t+1}$. Weight gradients
+accumulate across all $T$ timesteps. This is the same
 `+=` accumulation pattern the library has used since the foundations post's
 `Linear` layer: per-example gradients sum within a mini-batch;
 per-spatial-position gradients sum within a `Conv2D` forward (because

@@ -5,7 +5,7 @@ input with shape `(in_channels, in_h, in_w)`, producing an output with
 shape `(out_channels, out_h, out_w)` where
 `out_h = in_h - kernel_size + 1` and similarly for `out_w`. Padding is
 zero, stride is one. These restrictions keep the implementation small and
-the math transparent; padding and strides are noted in the walkthrough but
+the math transparent; padding and strides are noted in the CNN chapter but
 not implemented here.
 
 Inputs and outputs are presented as flat `list[float]` at the layer

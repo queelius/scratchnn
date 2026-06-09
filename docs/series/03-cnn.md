@@ -204,10 +204,42 @@ with terms whose indices fall outside the valid range dropped. This is
 the spatial transpose of the forward pass; in convolutional-network
 jargon it is called *transposed convolution*.
 
+All three gradients fall out of one pass. Here is the actual
+`Conv2D.backward` from `scratchnn`. The offset variables are just
+flat-index bookkeeping (the 2-D shape is folded into a `list[float]`,
+channel-major then row-major); the two lines that matter are the final
+`+=` accumulations into the shared kernel and into the input:
+
+```python
+def backward(self, g):
+    k, in_w, in_hw = self.k, self.in_w, self.in_h * self.in_w
+    out_w, out_hw = self.out_w, self.out_h * self.out_w
+    dx = [0.0] * len(self.x)
+    for c_out in range(self.out_channels):
+        kernel, dkernel = self.kernels[c_out], self.dkernels[c_out]
+        for r in range(self.out_h):
+            for col in range(self.out_w):
+                g_rc = g[c_out * out_hw + r * out_w + col]
+                self.dbias[c_out] += g_rc                   # dL/db
+                for c_in in range(self.in_channels):
+                    ox = c_in * in_hw + r * in_w
+                    ok = c_in * k * k
+                    for i in range(k):
+                        for j in range(k):
+                            xidx = ox + i * in_w + col + j
+                            kidx = ok + i * k + j
+                            dkernel[kidx] += g_rc * self.x[xidx]  # dL/dW
+                            dx[xidx]      += g_rc * kernel[kidx]   # dL/dx
+    return dx
+```
+
 The crucial observation: every accumulation in `Conv2D` is the *same*
 `+=` pattern the library already uses for mini-batch gradients in
 `Linear`. The mini-batch sums per-example gradients; the conv sums
-per-position gradients. Same operator, finer grain. The foundations post's
+per-position gradients. Because one kernel weight is read at every
+output position in `forward`, `dkernel[kidx] += ...` fires at every
+position in `backward`. Weight sharing and gradient accumulation are
+the same fact read forward and backward. Same operator, finer grain. The foundations post's
 closing note on autograd (per-layer becomes per-operation) is one more
 step along the same axis.
 

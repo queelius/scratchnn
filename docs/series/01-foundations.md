@@ -155,40 +155,118 @@ is the empirical case for depth; the theoretical case for hidden
 layers at all is XOR.
 
 The training rule for an MLP is **backpropagation**. The trick is to
-make the chain rule *local*: each layer implements two methods,
+make the chain rule *local*: each layer implements `forward` (input to
+output) and `backward` (gradient with respect to the output, to
+gradient with respect to the input), plus `parameters`, which exposes
+its weights and their gradients. A layer never sees the rest of the
+network. That contract is the entire base class:
 
-```
-forward(x)  -> output
-backward(g) -> gradient w.r.t. its input   (g = gradient w.r.t. its output)
+```python
+class Layer:
+    def forward(self, x):
+        raise NotImplementedError
+
+    def backward(self, g):
+        """Given g = dL/d(output), return dL/d(input).
+        Layers with parameters also accumulate their parameter grads."""
+        raise NotImplementedError
+
+    def parameters(self):
+        """A list of (values, grads) pairs: each a parameter vector
+        and its same-length gradient vector."""
+        return []
 ```
 
-`backward` also stashes the layer's own parameter gradients. A third
-method, `parameters()`, hands those weights and their gradients to the
-optimizer and the gradient checker. A layer never sees the rest of the
-network. The `Network` runs `forward` through the layers in order,
-then `backward` through them in reverse, threading the gradient:
-
-```
-g = loss.grad(logits, y)          # the familiar p - y from section 4
-for layer in reversed(layers):
-    g = layer.backward(g)
-```
-
-Each layer's `backward` is tiny. For `Linear`
-($\mathbf{y} = \mathbf{W}\mathbf{x} + \mathbf{b}$), the parameter
-gradients and the gradient passed back are
+`Linear` ($\mathbf{y} = W\mathbf{x} + \mathbf{b}$) is the only layer
+with parameters. Its `backward` writes out three gradients,
 
 $$\frac{\partial L}{\partial W_{ij}} = g_i\, x_j,
   \qquad \frac{\partial L}{\partial b_i} = g_i,
-  \qquad \frac{\partial L}{\partial x_j} = \sum_i W_{ij}\, g_i.$$
+  \qquad \frac{\partial L}{\partial x_j} = \sum_i W_{ij}\, g_i,$$
 
-For `Tanh`: $\mathbf{g} \odot \bigl(1 - \tanh^2(\mathbf{x})\bigr)$.
-For `ReLU`: $\mathbf{g}$ where the input was positive, else $0$.
+and that is exactly what the code says. Note the `+=`: parameter
+gradients *accumulate*, so a mini-batch can sum per-example
+contributions before the optimizer steps.
+
+```python
+class Linear(Layer):
+    def forward(self, x):
+        self.x = x
+        return [dot(w, x) + b for w, b in zip(self.weights, self.bias)]
+
+    def backward(self, g):
+        for i, gi in enumerate(g):
+            for j, xj in enumerate(self.x):
+                self.dweights[i][j] += gi * xj     # dL/dW_ij = g_i x_j
+            self.dbias[i] += gi                    # dL/db_i  = g_i
+        return [sum(self.weights[i][j] * g[i] for i in range(len(g)))
+                for j in range(len(self.x))]       # dL/dx_j = sum_i W_ij g_i
+```
+
+There is no matrix type. A vector is a `list[float]`, `dot` is the only
+named helper, and the outer product and transposed mat-vec above are
+written inline as comprehensions. The two activations are smaller still,
+and match the derivatives one-to-one ($1 - \tanh^2$ for `Tanh`, the
+positive-part mask for `ReLU`):
+
+```python
+class Tanh(Layer):
+    def forward(self, x):
+        self.out = [math.tanh(xi) for xi in x]
+        return self.out
+    def backward(self, g):
+        return [gi * (1.0 - oi * oi) for gi, oi in zip(g, self.out)]
+
+class ReLU(Layer):
+    def forward(self, x):
+        self.positive = [xi > 0.0 for xi in x]
+        return [xi if xi > 0.0 else 0.0 for xi in x]
+    def backward(self, g):
+        return [gi if p else 0.0 for gi, p in zip(g, self.positive)]
+```
+
+The `Network` threads these together. `forward` runs the layers in
+order and caches the logits; `backward` seeds the gradient from the
+loss and pushes it back through the layers in reverse:
+
+```python
+class Network:
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer.forward(x)
+        self.logits = x
+        return x
+
+    def backward(self, y):
+        g = self.loss.grad(self.logits, y)    # the familiar p - y
+        for layer in reversed(self.layers):
+            g = layer.backward(g)
+        return g
+```
+
+The optimizer is written *once*, generically, on top of
+`parameters()`. There is no per-layer `step` and no `Optimizer` class.
+`zero_grad` clears every gradient; `step` applies the *mean* gradient
+over a batch of $n$ by dividing by $n$, which is the counterpart to the
+accumulating `+=` in `backward`:
+
+```python
+    def zero_grad(self):
+        for _values, grads in self.parameters():
+            for k in range(len(grads)):
+                grads[k] = 0.0
+
+    def step(self, lr, n):
+        for values, grads in self.parameters():
+            for k in range(len(values)):
+                values[k] -= (lr / n) * grads[k]
+```
 
 The key realization: the MLP introduced **no new math** beyond what a
 single linear unit needed. The chain rule applied locally, composed
 across layers, gives gradients for any depth. Depth is just more
-composition of the same local steps.
+composition of the same local steps, and the optimizer never has to
+know how many layers there are.
 
 This is the foundation. Everything that follows is the same MLP, with
 different *interpretations* of its output (classification, sections 4
@@ -227,6 +305,23 @@ loss:
 
 ```python
 net = Network([Linear(n_features, 1)], loss=SigmoidBCE())
+```
+
+The loss owns the output activation: the `Network` emits the raw logit,
+and `SigmoidBCE` is what turns it into a probability and a gradient.
+Its `grad` is the $p - y$ derived just above; its `value` is binary
+cross-entropy computed straight from the logit in a numerically stable
+form (section 8), never by first forming $p$ and taking a log:
+
+```python
+class SigmoidBCE(Loss):
+    def value(self, logits, y):
+        z = logits[0]
+        return max(z, 0.0) - z * y + math.log1p(math.exp(-abs(z)))
+    def grad(self, logits, y):
+        return [sigmoid(logits[0]) - y]      # p - y
+    def probs(self, logits):
+        return [sigmoid(logits[0])]
 ```
 
 This is structurally the same SLP from section 2, with a probability
@@ -270,6 +365,23 @@ categorical head:
 
 ```python
 net = Network([Linear(n_features, K)], loss=SoftmaxCrossEntropy())
+```
+
+The head mirrors `SigmoidBCE` exactly, one $K$-class level up. `value`
+is the stable $\mathrm{logsumexp}(\mathbf{z}) - z_y$ form of
+$-\log \mathrm{softmax}(\mathbf{z})_y$; `grad` is $\mathbf{p}$ with $1$
+subtracted at the true class, the one-hot $\mathbf{p} - \mathbf{y}$:
+
+```python
+class SoftmaxCrossEntropy(Loss):
+    def value(self, logits, y):
+        return logsumexp(logits) - logits[y]
+    def grad(self, logits, y):
+        p = softmax(logits)
+        p[y] -= 1.0
+        return p
+    def probs(self, logits):
+        return softmax(logits)
 ```
 
 On the 8x8 UCI optical-recognition digits (3823 training, 1797 test,
@@ -438,7 +550,30 @@ Cross-entropy is computed as $\mathrm{logsumexp}(\mathbf{z}) - z_y$
 rather than $-\log\, \mathrm{softmax}(\mathbf{z})_y$, which would risk
 $\log 0$. The sigmoid is evaluated with a sign branch, and binary
 cross-entropy is computed straight from the logit, both to avoid
-overflow and $\log 0$.
+overflow and $\log 0$. These are the primitives the loss classes call:
+
+```python
+def sigmoid(z):
+    if z >= 0.0:
+        return 1.0 / (1.0 + math.exp(-z))     # safe: exp(-z), z >= 0
+    ez = math.exp(z)                          # safe: exp(z),  z < 0
+    return ez / (1.0 + ez)
+
+def logsumexp(zs):
+    m = max(zs)
+    return m + math.log(sum(math.exp(z - m) for z in zs))
+
+def softmax(zs):
+    m = max(zs)
+    exps = [math.exp(z - m) for z in zs]
+    total = sum(exps)
+    return [e / total for e in exps]
+```
+
+In every case the exponent argument is held at or below $0$, so $e^z$
+stays in $[0, 1]$ and never overflows. The max-subtraction in `softmax`
+and `logsumexp` is the section-6 gauge freedom; the sign branch in
+`sigmoid` is the same trick for the two-class case.
 
 ## 9. Trust, but verify: numerical gradients
 
@@ -451,10 +586,30 @@ $$\frac{\partial L}{\partial \theta}
 
 `gradient_check` computes this central difference for every parameter
 and compares it to the analytical gradient from `backward`. If they
-disagree, the analytical gradient is wrong. This is far too slow to
-train with: one forward pass per parameter. But it is the ground
-truth that keeps the fast method honest. `test_gradients.py` runs it
-on all four configurations.
+disagree, the analytical gradient is wrong. It perturbs each parameter
+in place, twice, and reads off the loss:
+
+```python
+def gradient_check(net, x, y, eps=1e-5):
+    net.zero_grad(); net.forward(x); net.backward(y)
+    worst = 0.0
+    for values, grads in net.parameters():
+        for k in range(len(values)):
+            original = values[k]
+            values[k] = original + eps; loss_plus  = net.loss_value(x, y)
+            values[k] = original - eps; loss_minus = net.loss_value(x, y)
+            values[k] = original
+            numerical = (loss_plus - loss_minus) / (2.0 * eps)
+            denom = max(abs(numerical) + abs(grads[k]), 1e-12)
+            worst = max(worst, abs(numerical - grads[k]) / denom)
+    return worst
+```
+
+This is far too slow to train with: one forward pass per parameter. But
+it is the ground truth that keeps the fast method honest, and it works
+for *any* layer and loss because it only ever touches `parameters()`,
+`forward`, and `backward`. `test_gradients.py` runs it on all the
+configurations in the series.
 
 One caveat: `ReLU` has a kink at $0$ and no derivative there. A finite
 difference that straddles the kink will disagree with the analytical

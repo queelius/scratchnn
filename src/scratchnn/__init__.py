@@ -5,7 +5,7 @@ perceptron as configurations of one Network class, built on hand-derived
 per-layer backpropagation. The network computes logits; the loss interprets
 them. Standard library only.
 
-See docs/walkthrough.md for the accompanying narrative.
+See docs/series/01-foundations.md for the accompanying narrative.
 """
 from .neural_net import (
     dot,

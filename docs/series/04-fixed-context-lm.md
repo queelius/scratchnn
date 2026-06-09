@@ -96,6 +96,33 @@ single forward pass, the layer maintains an internal LIFO cache of
 which token ids were used. Backward pops the cache and accumulates each
 gradient into the matching row.
 
+`EmbedConcat` is the thin wrapper that turns $N$ token ids into the one
+flat vector the MLP head wants. Its forward embeds each id and
+concatenates; its backward slices the incoming gradient into $N$ chunks
+of length $d$ and routes them back in reverse, so the pops line up with
+the pushes:
+
+```python
+class EmbedConcat(Layer):
+    def forward(self, ids):                  # ids: list[int] of length N
+        self.embed.reset_cache()
+        out = []
+        for token_id in ids:
+            out.extend(self.embed.forward(token_id))
+        return out                           # flat list, length N * d
+
+    def backward(self, g):
+        d = self.embed_dim
+        for i in reversed(range(self.context_len)):   # reverse = LIFO
+            self.embed.backward(g[i * d:(i + 1) * d])
+        return None
+```
+
+The concatenation is the entire positional prior: token $i$'s embedding
+always lands in slots $[i d, (i+1) d)$, so the MLP head downstream can
+learn position-specific weights. `parameters()` delegates to the wrapped
+`Embedding`, so the table is the only place the rows live.
+
 ## 3. The inductive biases
 
 The Bengio LM has three architectural commitments, each one a
