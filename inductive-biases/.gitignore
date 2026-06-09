@@ -12,7 +12,7 @@
 *.synctex.gz
 *.fls
 *.fdb_latexmk
-book/book.pdf
+book/*.pdf
 
 # uv / Python
 .venv/
